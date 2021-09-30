@@ -8,7 +8,7 @@ add_library(Colla STATIC
 )
 
 IF (WIN32)
-    target_link_libraries(Common ws2_32.lib)
+    target_link_libraries(Colla ws2_32.lib)
 ELSE()
     # posix
 ENDIF()

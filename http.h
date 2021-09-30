@@ -56,7 +56,7 @@ typedef struct {
     uint8_t minor;
 } http_version_t;
 
-// transaltes a http_version_t to a single readable number (e.g. 1.1 -> 11, 1.0 -> 10, etc)
+// translates a http_version_t to a single readable number (e.g. 1.1 -> 11, 1.0 -> 10, etc)
 int httpVerNumber(http_version_t ver);
 
 typedef struct {
