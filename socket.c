@@ -121,11 +121,19 @@ bool skConnectPro(socket_t sock, const struct sockaddr *name, socket_len_t namel
 }
 
 int skSend(socket_t sock, char *buf, int len) {
-    return send(sock, buf, len, 0);
+    return skSendPro(sock, buf, len, 0);
+}
+
+int skSendPro(socket_t sock, char *buf, int len, int flags) {
+    return send(sock, buf, len, flags);
 }
 
 int skReceive(socket_t sock, char *buf, int len) {
-    return recv(sock, buf, len, 0);
+    return skReceivePro(sock, buf, len, 0);
+}
+
+int skReceivePro(socket_t sock, char *buf, int len, int flags) {
+    return recv(sock, buf, len, flags);
 }
 
 bool skIsValid(socket_t sock) {

@@ -16,11 +16,13 @@ extern "C" {
 struct sockaddr;
 
 #if SOCK_WINDOWS
-    typedef uintptr_t socket_t;
+    #include <winsock2.h>
+    typedef SOCKET socket_t;
     typedef int socket_len_t;
     #define INVALID_SOCKET  (socket_t)(~0)
     #define SOCKET_ERROR              (-1)
 #elif SOCK_POSIX
+    #include <sys/socket.h> 
     typedef int socket_t;
     typedef uint32_t socket_len_t;
     #define INVALID_SOCKET (-1)
@@ -66,8 +68,12 @@ bool skConnectPro(socket_t sock, const struct sockaddr *name, socket_len_t namel
 
 // Sends data on a socket, returns true on success
 int skSend(socket_t sock, char *buf, int len);
+// Sends data on a socket, returns true on success
+int skSendPro(socket_t sock, char *buf, int len, int flags);
 // Receives data from a socket, returns byte count on success, 0 on connection close or -1 on error
 int skReceive(socket_t sock, char *buf, int len);
+// Sends data on a socket, returns true on success
+int skReceivePro(socket_t sock, char *buf, int len, int flags);
 
 // Checks that a opened socket is valid, returns true on success
 bool skIsValid(socket_t sock);

@@ -324,6 +324,8 @@ str_ostream_t ostrInitStr(const char *cstr, size_t len) {
     str_ostream_t stream;
     stream.buf = malloc(len + 1);
     memcpy(stream.buf, cstr, len);
+    stream.size = len;
+    stream.allocated = len + 1;
     return stream;
 }
 

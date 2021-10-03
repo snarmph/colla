@@ -7,12 +7,17 @@ extern "C" {
 #include <stddef.h>
 #include <string.h>
 
-#if _WIN32
-#define stricmp _stricmp
-#elif __unix__ || __APPLE__
-#define stricmp strcasecmp
+#ifdef _WIN32
+    #include <stdio.h>
+    #include <BaseTsd.h>
+    typedef SSIZE_T ssize_t;
+    ssize_t getdelim(char **buf, size_t *bufsz, int delimiter, FILE *fp);
+    ssize_t getline(char **line_ptr, size_t *n, FILE *stream);
+    #define stricmp _stricmp
 #else
-#error "stricmp is not supported"
+    #define stricmp strcasecmp
+    #define _GNU_SOURCE
+    #include <stdio.h>
 #endif
 
 // prefix str -> changes string
