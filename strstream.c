@@ -504,10 +504,10 @@ void ostrAppenddouble(str_ostream_t *ctx, double val) {
 }
 
 void ostrAppendview(str_ostream_t *ctx, strview_t view) {
-    if((ctx->allocated - ctx->size) < view.size) {
-        _ostrRealloc(ctx, view.size + 1);
+    if((ctx->allocated - ctx->size) < view.len) {
+        _ostrRealloc(ctx, view.len + 1);
     }
-    memcpy(ctx->buf + ctx->size, view.buf, view.size);
-    ctx->size += view.size;
+    memcpy(ctx->buf + ctx->size, view.buf, view.len);
+    ctx->size += view.len;
     ctx->buf[ctx->size] = '\0';
 }

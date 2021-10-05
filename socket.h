@@ -19,8 +19,6 @@ struct sockaddr;
     #include <winsock2.h>
     typedef SOCKET socket_t;
     typedef int socket_len_t;
-    #define INVALID_SOCKET  (socket_t)(~0)
-    #define SOCKET_ERROR              (-1)
 #elif SOCK_POSIX
     #include <sys/socket.h> 
     typedef int socket_t;

@@ -4,8 +4,9 @@
 extern "C" {
 #endif
 
-#include <stdbool.h> // bool
-#include <string.h>  // memset
+#include <stdbool.h>  // bool
+#include <string.h>   // memset
+#include "tracelog.h" // fatal
 
 // heavily inspired by https://gist.github.com/Enichan/5f01140530ff0133fde19c9549a2a973
 
@@ -84,15 +85,20 @@ bool coIsDead(coroutine_t co);
     self.init = false;    \
     return false;
 
-#define coroutine(...)                  \
-    if(!self.init) {                    \
-        memset(&self, 0, sizeof(self)); \
-        self.init = true;               \
-    }                                   \
-    switch(COVAR->co.state) {           \
-        case 0:;                        \
-            __VA_ARGS__                 \
-    }                                   \
+#define coroutine(...)                                    \
+    if(!self.init) {                                      \
+        if(COVAR->co.state != 0) {                        \
+            fatal("coroutine not initialized in %s:%d,\n" \
+                  "did you forget to do '= {0};'?",       \
+                  __FILE__, __LINE__);                    \
+        }                                                 \
+        memset(&self, 0, sizeof(self));                   \
+        self.init = true;                                 \
+    }                                                     \
+    switch(COVAR->co.state) {                             \
+        case 0:;                                          \
+            __VA_ARGS__                                   \
+    }                                                     \
     yieldBreak();
 
 #define yield() _yield(__COUNTER__)

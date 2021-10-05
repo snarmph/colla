@@ -16,7 +16,7 @@ str_t strInitStr(const char *cstr) {
 }
 
 str_t strInitView(strview_t view) {
-    return strInitBuf(view.buf, view.size);
+    return strInitBuf(view.buf, view.len);
 }
 
 str_t strInitBuf(const char *buf, size_t len) {
@@ -48,7 +48,7 @@ str_t strDup(str_t ctx) {
 strview_t strGetView(str_t *ctx) {
     return (strview_t) {
         .buf = ctx->buf,
-        .size = ctx->len
+        .len = ctx->len
     };
 }
 
@@ -77,7 +77,7 @@ void strAppendStr(str_t *ctx, str_t str) {
 }
 
 void strAppendView(str_t *ctx, strview_t view) {
-    strAppendBuf(ctx, view.buf, view.size);
+    strAppendBuf(ctx, view.buf, view.len);
 }
 
 void strAppendBuf(str_t *ctx, const char *buf, size_t len) {
@@ -130,7 +130,7 @@ strview_t strSubview(str_t *ctx, size_t pos, size_t len) {
     if(len == SIZE_MAX || (pos + len) > ctx->len) len = ctx->len - pos;
     return (strview_t) {
         .buf = ctx->buf + pos,
-        .size = len
+        .len = len
     };
 }
 
@@ -169,7 +169,7 @@ void strTest(void) {
     {
         s = strInitStr("hello world");
         strview_t view = strGetView(&s);
-        printf("\"%.*s\" %zu\n", (int)view.size, view.buf, view.size);
+        printf("\"%.*s\" %zu\n", (int)view.len, view.buf, view.len);
         strFree(&s);
     }
     debug("== testing begin/end ============");
@@ -255,9 +255,9 @@ void strTest(void) {
 
         printf("-- view\n");
         strview_t v = strSubview(&s, 0, 5);
-        printf("0..5: \"%.*s\"\n", (int)v.size, v.buf);
+        printf("0..5: \"%.*s\"\n", (int)v.len, v.buf);
         v = strSubview(&s, 5, SIZE_MAX);
-        printf("6..SIZE_MAX: \"%.*s\"\n", (int)v.size, v.buf);
+        printf("6..SIZE_MAX: \"%.*s\"\n", (int)v.len, v.buf);
 
         strFree(&s);
     }

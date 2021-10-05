@@ -2,11 +2,8 @@
 
 #include <stdio.h>
 
-#undef INVALID_SOCKET
-#undef SOCKET_ERROR
-
 #if SOCK_WINDOWS
-#include <winsock2.h>
+#include <ws2tcpip.h>
 
 static bool _win_skInit();
 static bool _win_skCleanup();
@@ -72,7 +69,9 @@ bool skClose(socket_t sock) {
 bool skBind(socket_t sock, const char *ip, uint16_t port) {
     struct sockaddr_in addr;
     addr.sin_family = AF_INET;
+    // TODO use inet_pton instead
     addr.sin_addr.s_addr = inet_addr(ip);
+    
     addr.sin_port = htons(port);
 
     return skBindPro(sock, (struct sockaddr *) &addr, sizeof(addr));
@@ -101,6 +100,7 @@ socket_t skAcceptPro(socket_t sock, struct sockaddr *addr, socket_len_t *addrlen
 }
 
 bool skConnect(socket_t sock, const char *server, unsigned short server_port) {
+    // TODO use getaddrinfo insetad
     struct hostent *host = gethostbyname(server);
     // if gethostbyname fails, inet_addr will also fail and return an easier to debug error
     const char *address = server;

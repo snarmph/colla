@@ -4,15 +4,17 @@
 extern "C" {
 #endif
 
-#include <stddef.h>
+#include "slice.h"
 #include "strview.h"
 
 #define STR_TESTING
 
-typedef struct {
-    char *buf;
-    size_t len;
-} str_t;
+// typedef struct {
+//     char *buf;
+//     size_t len;
+// } str_t;
+
+typedef slice_t(char *) str_t;
 
 str_t strInit(void);
 str_t strInitStr(const char *cstr);

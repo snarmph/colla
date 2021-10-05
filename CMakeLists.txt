@@ -7,6 +7,8 @@ add_library(Colla STATIC
     str.c 
     coroutine.c 
     os.c 
+    fs.c 
+    file.c 
 )
 
 IF (WIN32)

@@ -9,12 +9,16 @@ extern "C" {
 #include <stddef.h>
 #include <limits.h>
 
+#include "slice.h"
+
 #define STRV_NOT_FOUND SIZE_MAX
 
-typedef struct {
-    const char *buf;
-    size_t size;
-} strview_t;
+// typedef struct {
+//     const char *buf;
+//     size_t size;
+// } strview_t;
+
+typedef slice_t(const char *) strview_t;
 
 strview_t strvInit(const char *cstr);
 strview_t strvInitLen(const char *buf, size_t size);

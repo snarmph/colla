@@ -225,7 +225,7 @@ void resParseFields(http_response_t *ctx, str_istream_t *in) {
         }
 
         istrSkip(in, 2); // skip \r\n
-    } while(line.size > 2);
+    } while(line.len > 2);
 }
 
 // == HTTP CLIENT =============================================================
