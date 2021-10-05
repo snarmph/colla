@@ -75,7 +75,7 @@ typedef struct {
     char *body;
 } http_request_t;
 
-http_request_t reqInit();
+http_request_t reqInit(void);
 void reqFree(http_request_t *ctx);
 
 bool reqHasField(http_request_t *ctx, const char *key);
@@ -96,7 +96,7 @@ typedef struct {
     char *body;
 } http_response_t;
 
-http_response_t resInit();
+http_response_t resInit(void);
 void resFree(http_response_t *ctx);
 
 bool resHasField(http_response_t *ctx, const char *key);
@@ -113,7 +113,7 @@ typedef struct {
     socket_t socket;
 } http_client_t;
 
-http_client_t hcliInit();
+http_client_t hcliInit(void);
 void hcliFree(http_client_t *ctx);
 
 void hcliSetHost(http_client_t *ctx, const char *hostname);

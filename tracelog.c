@@ -30,46 +30,58 @@
     #define RESET   ""
     #define BOLD    ""
 #else
-    #define BLACK   "\x1B[30m"
-    #define RED     "\x1B[31m"
-    #define GREEN   "\x1B[32m"
-    #define YELLOW  "\x1B[33m"
-    #define BLUE    "\x1B[34m"
-    #define MAGENTA "\x1B[35m"
-    #define CYAN    "\x1B[36m"
-    #define WHITE   "\x1B[37m"
-    #define RESET   "\x1B[0m"
-    #define BOLD    "\x1B[1m"
+    #define BLACK   "\033[30m"
+    #define RED     "\033[31m"
+    #define GREEN   "\033[32m"
+    #define YELLOW  "\033[33m"
+    #define BLUE    "\033[22;34m"
+    #define MAGENTA "\033[35m"
+    #define CYAN    "\033[36m"
+    #define WHITE   "\033[37m"
+    #define RESET   "\033[0m"
+    #define BOLD    "\033[1m"
 #endif
 
 #define MAX_TRACELOG_MSG_LENGTH 1024
 
+bool use_newline = true;
+
 void traceLog(LogLevel level, const char *fmt, ...) {
     char buffer[MAX_TRACELOG_MSG_LENGTH];
+    memset(buffer, 0, sizeof(buffer));
 
+    const char *beg;
     switch (level) {
-        case LogTrace:   strcpy(buffer, BOLD WHITE  "[TRACE]: "   RESET); break; 
-        case LogDebug:   strcpy(buffer, BOLD BLUE   "[DEBUG]: "   RESET); break; 
-        case LogInfo:    strcpy(buffer, BOLD GREEN  "[INFO]: "    RESET); break; 
-        case LogWarning: strcpy(buffer, BOLD YELLOW "[WARNING]: " RESET); break; 
-        case LogError:   strcpy(buffer, BOLD RED    "[ERROR]: "   RESET); break; 
-        case LogFatal:   strcpy(buffer, BOLD RED    "[FATAL]: "   RESET); break;        
+        case LogTrace:   beg = BOLD WHITE  "[TRACE]: "   RESET; break; 
+        case LogDebug:   beg = BOLD BLUE   "[DEBUG]: "   RESET; break; 
+        case LogInfo:    beg = BOLD GREEN  "[INFO]: "    RESET; break; 
+        case LogWarning: beg = BOLD YELLOW "[WARNING]: " RESET; break; 
+        case LogError:   beg = BOLD RED    "[ERROR]: "   RESET; break; 
+        case LogFatal:   beg = BOLD RED    "[FATAL]: "   RESET; break;        
         default: break;
     }
 
+    size_t offset = strlen(beg);
+    strncpy(buffer, beg, sizeof(buffer));
+
     va_list args;
     va_start(args, fmt);
-    vsnprintf(buffer, sizeof(buffer), fmt, args);
+    vsnprintf(buffer + offset, sizeof(buffer) - offset, fmt, args);
     va_end(args);
 
 #ifdef TLOG_VS
     OutputDebugStringA(buffer);
-    OutputDebugStringA("\n");
+    if(use_newline) OutputDebugStringA("\n");
 #else
-    puts(buffer);
+    printf("%s", buffer);
+    if(use_newline) puts("");
 #endif
 
 #ifndef TLOG_DONT_EXIT_ON_FATAL
     if (level == LogFatal) exit(1);
 #endif
+}
+
+void traceUseNewline(bool newline) {
+    use_newline = newline;
 }

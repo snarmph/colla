@@ -30,12 +30,12 @@ struct sockaddr;
 #endif
 
 // Initialize sockets, returns true on success
-bool skInit();
+bool skInit(void);
 // Terminates sockets, returns true on success
-bool skCleanup();
+bool skCleanup(void);
 
 // Opens a socket, check socket_t with skValid
-socket_t skOpen();
+socket_t skOpen(void);
 // Opens a socket using 'protocol', options are 
 // ip, icmp, ggp, tcp, egp, pup, udp, hmp, xns-idp, rdp
 // check socket_t with skValid
@@ -79,9 +79,9 @@ int skReceivePro(socket_t sock, char *buf, int len, int flags);
 bool skIsValid(socket_t sock);
 
 // Returns latest socket error, returns 0 if there is no error
-int skGetError();
+int skGetError(void);
 // Returns a human-readable string from a skGetError
-const char *skGetErrorString();
+const char *skGetErrorString(void);
 
 #ifdef __cplusplus
 } // extern "C"

@@ -14,7 +14,7 @@
 
 
 strview_t strvInit(const char *cstr) {
-    return strvInitLen(cstr, strlen(cstr));
+    return strvInitLen(cstr, cstr ? strlen(cstr) : 0);
 }
 
 strview_t strvInitLen(const char *buf, size_t size) {

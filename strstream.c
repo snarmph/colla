@@ -485,9 +485,9 @@ void ostrAppendi64(str_ostream_t *ctx, int64_t val) {
 
 void ostrAppendfloat(str_ostream_t *ctx, float val) {
     char buf[APPEND_BUF_LEN * 3];
-    int len = snprintf(buf, sizeof(buf), "%f", (double)val);
+    int len = snprintf(buf, sizeof(buf), "%g", (double)val);
     if(len <= 0) {
-        err("ostrAppendfloat: couldn't write %f", val);
+        err("ostrAppendfloat: couldn't write %g", (double)val);
         return;
     } 
     ostrAppendview(ctx, strvInitLen(buf, len));
@@ -495,9 +495,9 @@ void ostrAppendfloat(str_ostream_t *ctx, float val) {
 
 void ostrAppenddouble(str_ostream_t *ctx, double val) {
     char buf[APPEND_BUF_LEN * 3];
-    int len = snprintf(buf, sizeof(buf), "%f", val);
+    int len = snprintf(buf, sizeof(buf), "%g", val);
     if(len <= 0) {
-        err("ostrAppenddouble: couldn't write %f", val);
+        err("ostrAppenddouble: couldn't write %g", val);
         return;
     } 
     ostrAppendview(ctx, strvInitLen(buf, len));

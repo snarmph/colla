@@ -4,7 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "strutils.h"
+#include "os.h"
 #include "tracelog.h"
 
 // == INTERNAL ================================================================
@@ -282,7 +282,7 @@ http_response_t hcliSendRequest(http_client_t *ctx, http_request_t *req) {
 
     http_response_t res = resInit();
     char *request_str = NULL;
-    str_ostream_t received = ostrInit(1024);
+    str_ostream_t received = ostrInitLen(1024);
 
     if(!skInit()) {
         err("couldn't initialize sockets %s", skGetErrorString());

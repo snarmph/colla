@@ -68,7 +68,7 @@ typedef struct {
     size_t allocated;
 } str_ostream_t;
 
-str_ostream_t ostrInit();
+str_ostream_t ostrInit(void);
 str_ostream_t ostrInitLen(size_t initial_alloc);
 str_ostream_t ostrInitStr(const char *buf, size_t len);
 

@@ -4,7 +4,9 @@ add_library(Colla STATIC
     http.c 
     strstream.c 
     strview.c 
-    strutils.c 
+    str.c 
+    coroutine.c 
+    os.c 
 )
 
 IF (WIN32)

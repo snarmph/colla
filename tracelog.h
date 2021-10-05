@@ -10,11 +10,14 @@ extern "C" {
  * -> TLOG_DONT_EXIT_ON_FATAL: don't call 'exit(1)' when using LogFatal
 */
 
+#include <stdbool.h>
+
 typedef enum {
     LogAll, LogTrace, LogDebug, LogInfo, LogWarning, LogError, LogFatal
 } LogLevel;
 
 void traceLog(LogLevel level, const char *fmt, ...);
+void traceUseNewline(bool use_newline);
 
 #define trace(...) traceLog(LogTrace, __VA_ARGS__)
 #define debug(...) traceLog(LogDebug, __VA_ARGS__)
