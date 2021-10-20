@@ -1,6 +1,12 @@
 #include "socket.h"
 
 #include <stdio.h>
+#include "tracelog.h"
+
+#ifndef NDEBUG
+// VERY MUCH NOT THREAD SAFE
+static int initialize_count = 0;
+#endif
 
 #if SOCK_WINDOWS
 #include <ws2tcpip.h>
@@ -13,8 +19,6 @@ static const char *_win_skGetErrorString();
 #define SOCK_CALL(fun) _win_##fun
 
 #elif SOCK_POSIX
-#include <sys/socket.h> 
-#include <arpa/inet.h>
 #include <netdb.h>
 #include <unistd.h>
 #include <errno.h>
@@ -33,18 +37,37 @@ static const char *_posix_skGetErrorString();
 #endif
 
 bool skInit() {
+#ifndef NDEBUG
+    ++initialize_count;
+#endif
     return SOCK_CALL(skInit());
 }
 
 bool skCleanup() {
+#ifndef NDEBUG
+    --initialize_count;
+#endif
     return SOCK_CALL(skCleanup());
 }
 
-socket_t skOpen() {
-    return skOpenPro(AF_INET, SOCK_STREAM, 0);
+socket_t skOpen(skType type) {
+    int sock_type;
+
+    switch(type) {
+    case SOCK_TCP: sock_type = SOCK_STREAM; break;
+    case SOCK_UDP: sock_type = SOCK_DGRAM;  break;
+    default: fatal("skType not recognized: %d", type); break;
+    }
+
+    return skOpenPro(AF_INET, sock_type, 0);
 }
 
 socket_t skOpenEx(const char *protocol) {
+#ifndef NDEBUG
+    if(initialize_count <= 0) {
+        fatal("skInit has not been called");
+    }
+#endif
     struct protoent *proto = getprotobyname(protocol);
     if(!proto) {
         return INVALID_SOCKET;
@@ -53,7 +76,20 @@ socket_t skOpenEx(const char *protocol) {
 }
 
 socket_t skOpenPro(int af, int type, int protocol) {
+#ifndef NDEBUG
+    if(initialize_count <= 0) {
+        fatal("skInit has not been called");
+    }
+#endif
     return socket(af, type, protocol);
+}
+
+sk_addrin_t skAddrinInit(const char *ip, uint16_t port) {
+    sk_addrin_t addr;
+    addr.sin_family = AF_INET;
+	addr.sin_port = htons(port);
+	addr.sin_addr.s_addr = inet_addr(ip);
+    return addr;
 }
 
 bool skClose(socket_t sock) {
@@ -67,17 +103,17 @@ bool skClose(socket_t sock) {
 }
 
 bool skBind(socket_t sock, const char *ip, uint16_t port) {
-    struct sockaddr_in addr;
+    sk_addrin_t addr;
     addr.sin_family = AF_INET;
     // TODO use inet_pton instead
     addr.sin_addr.s_addr = inet_addr(ip);
     
     addr.sin_port = htons(port);
 
-    return skBindPro(sock, (struct sockaddr *) &addr, sizeof(addr));
+    return skBindPro(sock, (sk_addr_t *) &addr, sizeof(addr));
 }
 
-bool skBindPro(socket_t sock, const struct sockaddr *name, socket_len_t namelen) {
+bool skBindPro(socket_t sock, const sk_addr_t *name, socket_len_t namelen) {
     return bind(sock, name, namelen) != SOCKET_ERROR;
 }
 
@@ -90,12 +126,12 @@ bool skListenPro(socket_t sock, int backlog) {
 }
 
 socket_t skAccept(socket_t sock) {
-    struct sockaddr_in addr;
+    sk_addrin_t addr;
     socket_len_t addr_size = (socket_len_t)sizeof(addr);
-    return skAcceptPro(sock, (struct sockaddr *) &addr, &addr_size);
+    return skAcceptPro(sock, (sk_addr_t *) &addr, &addr_size);
 }
 
-socket_t skAcceptPro(socket_t sock, struct sockaddr *addr, socket_len_t *addrlen) {
+socket_t skAcceptPro(socket_t sock, sk_addr_t *addr, socket_len_t *addrlen) {
     return accept(sock, addr, addrlen);
 }
 
@@ -108,24 +144,32 @@ bool skConnect(socket_t sock, const char *server, unsigned short server_port) {
         address = inet_ntoa(*(struct in_addr*)host->h_addr_list[0]);
     }
     
-    struct sockaddr_in addr;
+    sk_addrin_t addr;
     addr.sin_family = AF_INET;
     addr.sin_addr.s_addr = inet_addr(address);
     addr.sin_port = htons(server_port);
 
-    return skConnectPro(sock, (struct sockaddr *) &addr, sizeof(addr));
+    return skConnectPro(sock, (sk_addr_t *) &addr, sizeof(addr));
 }
 
-bool skConnectPro(socket_t sock, const struct sockaddr *name, socket_len_t namelen) {
+bool skConnectPro(socket_t sock, const sk_addr_t *name, socket_len_t namelen) {
     return connect(sock, name, namelen) != SOCKET_ERROR;
 }
 
-int skSend(socket_t sock, char *buf, int len) {
+int skSend(socket_t sock, const char *buf, int len) {
     return skSendPro(sock, buf, len, 0);
 }
 
-int skSendPro(socket_t sock, char *buf, int len, int flags) {
+int skSendPro(socket_t sock, const char *buf, int len, int flags) {
     return send(sock, buf, len, flags);
+}
+
+int skSendTo(socket_t sock, const char *buf, int len, const sk_addrin_t *to) {
+    return skSendToPro(sock, buf, len, 0, (sk_addr_t*) to, sizeof(sk_addrin_t));
+}
+
+int skSendToPro(socket_t sock, const char *buf, int len, int flags, const sk_addr_t *to, int tolen) {
+    return sendto(sock, buf, len, flags, to, tolen);
 }
 
 int skReceive(socket_t sock, char *buf, int len) {
@@ -134,6 +178,15 @@ int skReceive(socket_t sock, char *buf, int len) {
 
 int skReceivePro(socket_t sock, char *buf, int len, int flags) {
     return recv(sock, buf, len, flags);
+}
+
+int skReceiveFrom(socket_t sock, char *buf, int len, sk_addrin_t *from) {
+    int fromlen = sizeof(sk_addr_t);
+    return skReceiveFromPro(sock, buf, len, 0, (sk_addr_t*)from, &fromlen);
+}
+
+int skReceiveFromPro(socket_t sock, char *buf, int len, int flags, sk_addr_t *from, int *fromlen) {
+    return recvfrom(sock, buf, len, flags, from, fromlen);
 }
 
 bool skIsValid(socket_t sock) {

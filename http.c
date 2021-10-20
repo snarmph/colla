@@ -289,7 +289,7 @@ http_response_t hcliSendRequest(http_client_t *ctx, http_request_t *req) {
         goto skopen_error;
     }
 
-    ctx->socket = skOpen();
+    ctx->socket = skOpen(SOCK_TCP);
     if(ctx->socket == INVALID_SOCKET) {
         err("couldn't open socket %s", skGetErrorString());
         goto error;

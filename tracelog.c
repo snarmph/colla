@@ -5,6 +5,10 @@
 #include <stdarg.h>
 #include <stdlib.h>
 
+#ifdef _WIN32 
+    #pragma warning(disable:4996) // _CRT_SECURE_NO_WARNINGS.
+#endif
+
 #ifdef TLOG_VS
     #ifdef _WIN32
         #ifndef TLOG_NO_COLOURS
