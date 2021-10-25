@@ -1,8 +1,11 @@
 #pragma once
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <stdint.h>
 #include "str.h"
-#include "strview.h"
 
 enum {
     FILE_READ, FILE_WRITE, FILE_BOTH
@@ -29,3 +32,7 @@ bool fileSeekEnd(file_t *ctx);
 void fileRewind(file_t *ctx);
 
 uint64_t fileTell(file_t *ctx);
+
+#ifdef __cplusplus
+} // extern "C"
+#endif

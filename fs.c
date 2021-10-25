@@ -25,11 +25,12 @@ static int _modeToType(unsigned int mode) {
 
 fs_stat_t fsStat(file_t fp) {
     TCHAR path[MAX_PATH];
-    DWORD pathlen = GetFinalPathNameByHandle(
+    GetFinalPathNameByHandle(
         (HANDLE)fp.handle,
         path,
         MAX_PATH,
-        0);
+        0
+    );
 
     struct stat statbuf;
     int res = stat(path, &statbuf);
@@ -67,6 +68,13 @@ fs_time_t fsAsTime(int64_t timer) {
         err("%s", buf);
         return (fs_time_t) { 0 };
     }
+}
+
+bool fsIsDir(const char *path) {
+    DWORD attr = GetFileAttributes(path);
+
+    return attr != INVALID_FILE_ATTRIBUTES &&
+           attr & FILE_ATTRIBUTE_DIRECTORY;
 }
 
 #else
@@ -118,4 +126,10 @@ fs_time_t fsAsTime(int64_t timer) {
         return (fs_time_t) { 0 };
     }
 }
+
+bool fsIsDir(const char *path) {
+    struct stat statbuf;
+    return stat(path, &statbuf) == 0 && S_ISDIR(statbuf.st_mode);
+}
+
 #endif

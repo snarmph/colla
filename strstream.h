@@ -8,7 +8,7 @@ extern "C" {
 #include <stdbool.h>
 #include <stddef.h>
 
-#include "strview.h"
+#include "str.h"
 
 /* == INPUT STREAM ============================================ */
 
@@ -73,13 +73,20 @@ str_ostream_t ostrInitLen(size_t initial_alloc);
 str_ostream_t ostrInitStr(const char *buf, size_t len);
 
 void ostrFree(str_ostream_t *ctx);
-size_t ostrMove(str_ostream_t *ctx, char **str);
+void ostrClear(str_ostream_t *ctx);
+str_t ostrMove(str_ostream_t *ctx);
+
+char ostrBack(str_ostream_t *ctx);
+str_t ostrAsStr(str_ostream_t *ctx);
+strview_t ostrAsView(str_ostream_t *ctx);
+
+void ostrReplace(str_ostream_t *ctx, char from, char to);
 
 void ostrPrintf(str_ostream_t *ctx, const char *fmt, ...);
-
 void ostrPutc(str_ostream_t *ctx, char c);
 
 void ostrAppendbool(str_ostream_t *ctx, bool val);
+void ostrAppendchar(str_ostream_t *ctx, char val);
 void ostrAppendu8(str_ostream_t *ctx, uint8_t val);
 void ostrAppendu16(str_ostream_t *ctx, uint16_t val);
 void ostrAppendu32(str_ostream_t *ctx, uint32_t val);

@@ -93,7 +93,7 @@ int skReceivePro(socket_t sock, char *buf, int len, int flags);
 // Receives a datagram and stores the source address. 
 int skReceiveFrom(socket_t sock, char *buf, int len, sk_addrin_t *from);
 // Receives a datagram and stores the source address. 
-int skReceiveFromPro(socket_t sock, char *buf, int len, int flags, sk_addr_t *from, int *fromlen);
+int skReceiveFromPro(socket_t sock, char *buf, int len, int flags, sk_addr_t *from, socket_len_t *fromlen);
 
 // Checks that a opened socket is valid, returns true on success
 bool skIsValid(socket_t sock);

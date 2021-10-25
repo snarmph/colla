@@ -62,7 +62,7 @@ void traceLog(LogLevel level, const char *fmt, ...) {
         case LogWarning: beg = BOLD YELLOW "[WARNING]: " RESET; break; 
         case LogError:   beg = BOLD RED    "[ERROR]: "   RESET; break; 
         case LogFatal:   beg = BOLD RED    "[FATAL]: "   RESET; break;        
-        default: break;
+        default:         beg = "";                              break;
     }
 
     size_t offset = strlen(beg);

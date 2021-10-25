@@ -8,8 +8,8 @@ extern "C" {
 #include <stddef.h>
 #include <stdbool.h>
 
+#include "str.h"
 #include "strstream.h"
-#include "strview.h"
 #include "socket.h"
 
 enum {
@@ -64,13 +64,18 @@ typedef struct {
     char *value;
 } http_field_t;
 
+#define T http_field_t
+#define VEC_SHORT_NAME field_vec
+#define VEC_DISABLE_ERASE_WHEN
+#define VEC_NO_IMPLEMENTATION
+#include "vec.h"
+
 // == HTTP REQUEST ============================================================
 
 typedef struct {
     int method;
     http_version_t version;
-    http_field_t *fields;
-    int field_count;
+    field_vec_t fields;
     char *uri;
     char *body;
 } http_request_t;
@@ -84,14 +89,13 @@ void reqSetField(http_request_t *ctx, const char *key, const char *value);
 void reqSetUri(http_request_t *ctx, const char *uri);
 
 str_ostream_t reqPrepare(http_request_t *ctx);
-size_t reqString(http_request_t *ctx, char **str);
+str_t reqString(http_request_t *ctx);
 
 // == HTTP RESPONSE ===========================================================
 
 typedef struct {
     int status_code;
-    http_field_t *fields;
-    int field_count;
+    field_vec_t fields;
     http_version_t version;
     char *body;
 } http_response_t;

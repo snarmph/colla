@@ -303,8 +303,8 @@ strview_t istrGetviewLen(str_istream_t *ctx, size_t off, size_t len) {
 
 /* == OUTPUT STREAM =========================================== */
 
-static void _ostrRealloc(str_ostream_t *ctx, size_t atlest) {
-    ctx->allocated = (ctx->allocated * 2) + atlest;
+static void _ostrRealloc(str_ostream_t *ctx, size_t needed) {
+    ctx->allocated = (ctx->allocated * 2) + needed;
     ctx->buf = realloc(ctx->buf, ctx->allocated);
 }
 
@@ -329,22 +329,48 @@ str_ostream_t ostrInitStr(const char *cstr, size_t len) {
     return stream;
 }
 
-char ostrBack(str_ostream_t *ctx) {
-    return ctx->buf[ctx->size - 1];
-}
-
 void ostrFree(str_ostream_t *ctx) {
     free(ctx->buf);
+    ctx->buf = NULL;
     ctx->size = 0;
     ctx->allocated = 0;
 }
 
-size_t ostrMove(str_ostream_t *ctx, char **str) {
-    *str = ctx->buf;
-    ctx->buf = NULL;
-    size_t sz = ctx->size;
-    ostrFree(ctx);
-    return sz;
+void ostrClear(str_ostream_t *ctx) {
+    ctx->size = 0;
+}
+
+str_t ostrMove(str_ostream_t *ctx) {
+    str_t str = ostrAsStr(ctx);
+    *ctx = (str_ostream_t){0};
+    return str;
+}
+
+char ostrBack(str_ostream_t *ctx) {
+    if(ctx->size == 0) return '\0';
+    return ctx->buf[ctx->size - 1];
+}
+
+str_t ostrAsStr(str_ostream_t *ctx) {
+    return (str_t) {
+        .buf = ctx->buf,
+        .len = ctx->size
+    };
+}
+
+strview_t ostrAsView(str_ostream_t *ctx) {
+    return (strview_t) {
+        .buf = ctx->buf,
+        .len = ctx->size
+    };
+}
+
+void ostrReplace(str_ostream_t *ctx, char from, char to) {
+    for(size_t i = 0; i < ctx->size; ++i) {
+        if(ctx->buf[i] == from) {
+            ctx->buf[i] = to;
+        }
+    }
 }
 
 void ostrPrintf(str_ostream_t *ctx, const char *fmt, ...) {
@@ -384,15 +410,19 @@ error:
 #define APPEND_BUF_LEN 20
 
 void ostrPutc(str_ostream_t *ctx, char c) {
-    if(ctx->size >= ctx->allocated) {
-        _ostrRealloc(ctx, 1);
-    }
-    ctx->buf[ctx->size++] = c;
-    ctx->buf[ctx->size] = '\0';
+    ostrAppendchar(ctx, c);
 }
 
 void ostrAppendbool(str_ostream_t *ctx, bool val) {
     ostrAppendview(ctx, strvInit(val ? "true" : "false"));
+}
+
+void ostrAppendchar(str_ostream_t *ctx, char val) {
+    if(ctx->size >= ctx->allocated) {
+        _ostrRealloc(ctx, 1);
+    }
+    ctx->buf[ctx->size++] = val;
+    ctx->buf[ctx->size] = '\0';
 }
 
 void ostrAppendu8(str_ostream_t *ctx, uint8_t val) {

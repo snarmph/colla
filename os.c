@@ -36,7 +36,7 @@ ssize_t getdelim(char **buf, size_t *bufsz, int delimiter, FILE *fp) {
             }
             break;
         }
-        *ptr++ = c;
+        *ptr++ = (char)c;
         if(c == delimiter) {
             *ptr = '\0';
             result = ptr - *buf;

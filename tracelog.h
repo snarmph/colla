@@ -19,6 +19,7 @@ typedef enum {
 void traceLog(LogLevel level, const char *fmt, ...);
 void traceUseNewline(bool use_newline);
 
+#define tall(...)   traceLog(LogAll, __VA_ARGS__)
 #define trace(...) traceLog(LogTrace, __VA_ARGS__)
 #define debug(...) traceLog(LogDebug, __VA_ARGS__)
 #define info(...)  traceLog(LogInfo, __VA_ARGS__)

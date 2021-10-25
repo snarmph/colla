@@ -51,7 +51,7 @@ bool skCleanup() {
 }
 
 socket_t skOpen(skType type) {
-    int sock_type;
+    int sock_type = 0;
 
     switch(type) {
     case SOCK_TCP: sock_type = SOCK_STREAM; break;
@@ -181,11 +181,11 @@ int skReceivePro(socket_t sock, char *buf, int len, int flags) {
 }
 
 int skReceiveFrom(socket_t sock, char *buf, int len, sk_addrin_t *from) {
-    int fromlen = sizeof(sk_addr_t);
+    socket_len_t fromlen = sizeof(sk_addr_t);
     return skReceiveFromPro(sock, buf, len, 0, (sk_addr_t*)from, &fromlen);
 }
 
-int skReceiveFromPro(socket_t sock, char *buf, int len, int flags, sk_addr_t *from, int *fromlen) {
+int skReceiveFromPro(socket_t sock, char *buf, int len, int flags, sk_addr_t *from, socket_len_t *fromlen) {
     return recvfrom(sock, buf, len, flags, from, fromlen);
 }
 

@@ -7,17 +7,20 @@
 #include "os.h"
 #include "tracelog.h"
 
+#define T http_field_t
+#define VEC_SHORT_NAME field_vec
+#define VEC_DISABLE_ERASE_WHEN
+#define VEC_NO_DECLARATION
+#include "vec.h"
+
 // == INTERNAL ================================================================
 
-static void _setField(http_field_t **fields_ptr, int *fields_count_ptr, const char *key, const char *value) {
-    http_field_t *fields = *fields_ptr;
-    int fields_count = *fields_count_ptr;
-
+static void _setField(field_vec_t *fields, const char *key, const char *value) {
     // search if the field already exists
-    for(int i = 0; i < fields_count; ++i) {
-        if(stricmp(fields[i].key, key) == 0) {
+    for(size_t i = 0; i < fields->size; ++i) {
+        if(stricmp(fields->buf[i].key, key) == 0) {
             // replace value
-            char **curval = &fields[i].value;
+            char **curval = &fields->buf[i].value;
             size_t cur = strlen(*curval);
             size_t new = strlen(value);
             if(new > cur) {
@@ -29,17 +32,16 @@ static void _setField(http_field_t **fields_ptr, int *fields_count_ptr, const ch
         }
     }
     // otherwise, add it to the list
-    (*fields_count_ptr)++;;
-    (*fields_ptr) = realloc(fields, sizeof(http_field_t) * (*fields_count_ptr));
-    http_field_t *field = &(*fields_ptr)[(*fields_count_ptr) - 1];
-    
+    http_field_t field;
     size_t klen = strlen(key);
     size_t vlen = strlen(value);
-    field->key = malloc(klen + 1);
-    field->value = malloc(vlen + 1);
-    memcpy(field->key, key, klen);
-    memcpy(field->value, value, vlen);
-    field->key[klen] = field->value[vlen] = '\0';
+    field.key = malloc(klen + 1);
+    field.value = malloc(vlen + 1);
+    memcpy(field.key, key, klen);
+    memcpy(field.value, value, vlen);
+    field.key[klen] = field.value[vlen] = '\0';
+
+    field_vecPush(fields, field);
 }
 
 // == HTTP VERSION ============================================================
@@ -59,19 +61,19 @@ http_request_t reqInit() {
 }
 
 void reqFree(http_request_t *ctx) {
-    for(int i = 0; i < ctx->field_count; ++i) {
-        free(ctx->fields[i].key);
-        free(ctx->fields[i].value);
+    for(size_t i = 0; i < ctx->fields.size; ++i) {
+        free(ctx->fields.buf[i].key);
+        free(ctx->fields.buf[i].value);
     }
-    free(ctx->fields);
+    field_vecFree(&ctx->fields);
     free(ctx->uri);
     free(ctx->body);
     memset(ctx, 0, sizeof(http_request_t));
 }
 
 bool reqHasField(http_request_t *ctx, const char *key) {
-    for(int i = 0; i < ctx->field_count; ++i) {
-        if(stricmp(ctx->fields[i].key, key) == 0) {
+    for(size_t i = 0; i < ctx->fields.size; ++i) {
+        if(stricmp(ctx->fields.buf[i].key, key) == 0) {
             return true;
         }
     }
@@ -79,7 +81,7 @@ bool reqHasField(http_request_t *ctx, const char *key) {
 }
 
 void reqSetField(http_request_t *ctx, const char *key, const char *value) {
-    _setField(&ctx->fields, &ctx->field_count, key, value);
+    _setField(&ctx->fields, key, value);
 }
 
 void reqSetUri(http_request_t *ctx, const char *uri) {
@@ -116,8 +118,8 @@ str_ostream_t reqPrepare(http_request_t *ctx) {
         method, ctx->uri, ctx->version.major, ctx->version.minor
     );
 
-    for(int i = 0; i < ctx->field_count; ++i) {
-        ostrPrintf(&out, "%s: %s\r\n", ctx->fields[i].key, ctx->fields[i].value);
+    for(size_t i = 0; i < ctx->fields.size; ++i) {
+        ostrPrintf(&out, "%s: %s\r\n", ctx->fields.buf[i].key, ctx->fields.buf[i].value);
     }
 
     ostrAppendview(&out, strvInit("\r\n"));
@@ -129,9 +131,9 @@ error:
     return out;
 }
 
-size_t reqString(http_request_t *ctx, char **str) {
+str_t reqString(http_request_t *ctx) {
     str_ostream_t out = reqPrepare(ctx);
-    return ostrMove(&out, str);
+    return ostrMove(&out);
 }
 
 // == HTTP RESPONSE ===========================================================
@@ -143,18 +145,18 @@ http_response_t resInit() {
 }   
 
 void resFree(http_response_t *ctx) {
-    for(int i = 0; i < ctx->field_count; ++i) {
-        free(ctx->fields[i].key);
-        free(ctx->fields[i].value);
+    for(size_t i = 0; i < ctx->fields.size; ++i) {
+        free(ctx->fields.buf[i].key);
+        free(ctx->fields.buf[i].value);
     }
-    free(ctx->fields);
+    field_vecFree(&ctx->fields);
     free(ctx->body);
     memset(ctx, 0, sizeof(http_response_t));
 }
 
 bool resHasField(http_response_t *ctx, const char *key) {
-    for(int i = 0; i < ctx->field_count; ++i) {
-        if(stricmp(ctx->fields[i].key, key) == 0) {
+    for(size_t i = 0; i < ctx->fields.size; ++i) {
+        if(stricmp(ctx->fields.buf[i].key, key) == 0) {
             return true;
         }
     }
@@ -162,9 +164,9 @@ bool resHasField(http_response_t *ctx, const char *key) {
 }
 
 const char *resGetField(http_response_t *ctx, const char *field) {
-    for(int i = 0; i < ctx->field_count; ++i) {
-        if(stricmp(ctx->fields[i].key, field) == 0) {
-            return ctx->fields[i].value;
+    for(size_t i = 0; i < ctx->fields.size; ++i) {
+        if(stricmp(ctx->fields.buf[i].key, field) == 0) {
+            return ctx->fields.buf[i].value;
         }
     }
     return NULL;
@@ -194,7 +196,7 @@ void resParse(http_response_t *ctx, const char *data) {
     if(tran_encoding == NULL || stricmp(tran_encoding, "chunked")  != 0) {
         strview_t body = istrGetviewLen(&in, 0, SIZE_MAX);
         free(ctx->body);
-        strvCopy(body, &ctx->body);
+        ctx->body = strvCopy(body).buf;
     }
     else {
         fatal("chunked encoding not implemented yet");
@@ -215,10 +217,10 @@ void resParseFields(http_response_t *ctx, str_istream_t *in) {
             char *key_str = NULL;
             char *value_str = NULL;
 
-            strvCopy(key, &key_str);
-            strvCopy(value, &value_str);
+            key_str = strvCopy(key).buf;
+            value_str = strvCopy(value).buf;
 
-            _setField(&ctx->fields, &ctx->field_count, key_str, value_str);
+            _setField(&ctx->fields, key_str, value_str);
 
             free(key_str);
             free(value_str);
@@ -246,7 +248,7 @@ void hcliSetHost(http_client_t *ctx, const char *hostname) {
     strview_t hostview = strvInit(hostname);
     // if the hostname starts with http:// (case insensitive)
     if(strvICompare(strvSubstr(hostview, 0, 7), strvInit("http://")) == 0) {
-        strvCopy(strvSubstr(hostview, 7, SIZE_MAX), &ctx->host_name);
+        ctx->host_name = strvCopy(strvSubstr(hostview, 7, SIZE_MAX)).buf;
     }
     else if(strvICompare(strvSubstr(hostview, 0, 8), strvInit("https://")) == 0) {
         err("HTTPS protocol not yet supported");
@@ -254,7 +256,7 @@ void hcliSetHost(http_client_t *ctx, const char *hostname) {
     }
     else {
         // undefined protocol, use HTTP
-        strvCopy(hostview, &ctx->host_name);
+        ctx->host_name = strvCopy(hostview).buf;
     }
 }
 
@@ -281,7 +283,7 @@ http_response_t hcliSendRequest(http_client_t *ctx, http_request_t *req) {
     }
 
     http_response_t res = resInit();
-    char *request_str = NULL;
+    str_t req_str = strInit();
     str_ostream_t received = ostrInitLen(1024);
 
     if(!skInit()) {
@@ -296,13 +298,13 @@ http_response_t hcliSendRequest(http_client_t *ctx, http_request_t *req) {
     }
 
     if(skConnect(ctx->socket, ctx->host_name, ctx->port)) {
-        size_t len = reqString(req, &request_str);
-        if(len == 0) {
+        req_str = reqString(req);
+        if(req_str.len == 0) {
             err("couldn't get string from request");
             goto error;
         }
 
-        if(skSend(ctx->socket, request_str, (int)len) == SOCKET_ERROR) {
+        if(skSend(ctx->socket, req_str.buf, (int)req_str.len) == SOCKET_ERROR) {
             err("couldn't send request to socket: %s", skGetErrorString());
             goto error;
         }
@@ -336,7 +338,7 @@ error:
         err("couldn't clean up sockets %s", skGetErrorString());
     }
 skopen_error:
-    free(request_str);
+    strFree(&req_str);
     ostrFree(&received);
     return res;
 }

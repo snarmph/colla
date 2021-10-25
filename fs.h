@@ -1,5 +1,9 @@
 #pragma once
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <stdint.h>
 #include <stdbool.h>
 
@@ -32,3 +36,9 @@ typedef struct {
 
 fs_stat_t fsStat(file_t fp);
 fs_time_t fsAsTime(int64_t time);
+
+bool fsIsDir(const char *path);
+
+#ifdef __cplusplus
+} // extern "C"
+#endif
