@@ -73,12 +73,10 @@ cmutex_t mtxInit(void) {
         InitializeCriticalSection(crit_sec);
     }
     return (cmutex_t)crit_sec;
-    // return (cmutex_t)CreateMutexW(NULL, false, NULL);
 }
 
 void mtxDestroy(cmutex_t ctx) {
     DeleteCriticalSection((CRITICAL_SECTION *)ctx);
-    // CloseHandle((HANDLE)ctx);
 }
 
 bool mtxValid(cmutex_t ctx) {
@@ -88,22 +86,15 @@ bool mtxValid(cmutex_t ctx) {
 bool mtxLock(cmutex_t ctx) {
     EnterCriticalSection((CRITICAL_SECTION *)ctx);
     return true;
-    // DWORD result = WaitForSingleObject((HANDLE)ctx, INFINITE);
-    // // TODO maybe remove abandoned? or return a enum? it'll hurt usability tho
-    // return result == WAIT_OBJECT_0 || result == WAIT_ABANDONED;
 }
 
 bool mtxTryLock(cmutex_t ctx) {
     return TryEnterCriticalSection((CRITICAL_SECTION *)ctx);
-    // int result = mtxTimedLock(ctx, 0);
-    // if(result == CMTX_TIMEDOUT) return CMTX_BUSY;
-    // return result;
 }
 
 bool mtxUnlock(cmutex_t ctx) {
     LeaveCriticalSection((CRITICAL_SECTION *)ctx);
     return true;
-    // return ReleaseMutex((HANDLE)ctx);
 }
 
 
@@ -113,6 +104,8 @@ bool mtxUnlock(cmutex_t ctx) {
 #include <unistd.h>
 #include <sys/syscall.h>
 #include <sys/types.h>
+
+// == THREAD ===========================================
 
 #define INT_TO_VOIDP(a) ((void *)((uintptr_t)(a)))
 
@@ -167,6 +160,39 @@ void thrExit(int code) {
 bool thrJoin(cthread_t ctx, int *code) {
     void *result = code;
     return pthread_join((pthread_t)ctx, &result) != 0;
+}
+
+// == MUTEX ============================================
+
+cmutex_t mtxInit(void) {
+    pthread_mutex_t *mutex = malloc(sizeof(pthread_mutex_t));
+
+    if(mutex) {
+        int res = pthread_mutex_init(mutex, NULL);
+        if(res != 0) mutex = NULL;
+    }
+
+    return (cmutex_t)mutex;
+}
+
+void mtxDestroy(cmutex_t ctx) {
+    pthread_mutex_destroy((pthread_mutex_t *)ctx);
+}
+
+bool mtxValid(cmutex_t ctx) {
+    return (void *)ctx != NULL;
+}
+
+bool mtxLock(cmutex_t ctx) {
+    return pthread_mutex_lock((pthread_mutex_t *)ctx) == 0;
+}
+
+bool mtxTryLock(cmutex_t ctx) {
+    return pthread_mutex_trylock((pthread_mutex_t *)ctx) == 0;
+}
+
+bool mtxUnlock(cmutex_t ctx) {
+    return pthread_mutex_unlock((pthread_mutex_t *)ctx) == 0;
 }
 
 #endif
