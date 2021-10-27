@@ -16,7 +16,7 @@ typedef struct {
     HANDLE stop_event;
 } __dirwatch_internal_t;
 
-static DWORD watchDirThread(void *cdata) {
+static int watchDirThread(void *cdata) {
     __dirwatch_internal_t *desc = (__dirwatch_internal_t*)cdata;
 
     // stop_event is called from another thread when watchDirThread should exit 
@@ -136,16 +136,9 @@ dirwatch_t watchDir(dirwatch_desc_t desc) {
 
     dir.desc = (dirwatch_desc_t *)opts;
 
-    dir.handle = CreateThread(
-        NULL,
-        0,
-        watchDirThread,
-        (void *)dir.desc,
-        0,
-        NULL
-    );
+    dir.handle = thrCreate(watchDirThread, (void *)dir.desc);
 
-    if(dir.handle) {
+    if(thrValid(dir.handle)) {
         info("watching %s", desc.path);
     }
 
@@ -153,9 +146,15 @@ dirwatch_t watchDir(dirwatch_desc_t desc) {
 }
 
 void waitForWatchDir(dirwatch_t *ctx) {
-    if(!ctx->handle) return;
+    if(!thrValid(ctx->handle)) {
+        err("not valid"); 
+        return;
+    }
 
-    WaitForSingleObject((HANDLE)ctx->handle, INFINITE);
+    if(!thrJoin(ctx->handle, NULL)) {
+        err("dirwatch: couldn't wait for thread");
+    }
+    info("waited");
 
     HeapFree(GetProcessHeap(), 0, ctx->desc);
 }
@@ -169,7 +168,9 @@ void stopWatchDir(dirwatch_t *ctx, bool immediately) {
             err("couldn't signal event stop_event: %d", GetLastError());
         }
     }
-    WaitForSingleObject((HANDLE)ctx->handle, INFINITE);
+    if(!thrJoin(ctx->handle, NULL)) {
+        err("dirwatch: couldn't wait for thread");
+    }
 
     HeapFree(GetProcessHeap(), 0, ctx->desc);
 }
@@ -181,7 +182,6 @@ void stopWatchDir(dirwatch_t *ctx, bool immediately) {
 #include <unistd.h> // read
 #include <string.h>
 #include <errno.h>
-#include <pthread.h>
 #include <linux/limits.h> // MAX_PATH
 #include <stdatomic.h>
 
@@ -198,7 +198,7 @@ typedef struct {
     int wd;
 } __dirwatch_internal_t;
 
-static void *watchDirThread(void *cdata) {
+static int watchDirThread(void *cdata) {
     __dirwatch_internal_t *desc = (__dirwatch_internal_t *)cdata;
     info("watching %s", desc->path);
 
@@ -255,9 +255,9 @@ static void *watchDirThread(void *cdata) {
     inotify_rm_watch(desc->fd, desc->wd);
     close(desc->fd);
 
-    return (void*)0;
+    return 0;
 error:
-    return (void*)1;
+    return 1;
 }
 
 dirwatch_t watchDir(dirwatch_desc_t desc) {
@@ -272,16 +272,13 @@ dirwatch_t watchDir(dirwatch_desc_t desc) {
 
     dir.desc = (dirwatch_desc_t *)opts;
 
-    pthread_t thread;
-    pthread_create(&thread, NULL, watchDirThread, opts);
-
-    dir.handle = (void *)thread;
+    dir.handle = thrCreate(watchDirThread, opts);
     
     return dir;
 }
 
 void waitForWatchDir(dirwatch_t *ctx) {
-    pthread_join((pthread_t)ctx->handle, NULL);
+    thrJoin(ctx->handle, NULL);
     free(ctx->desc);
 }
 
@@ -293,7 +290,7 @@ void stopWatchDir(dirwatch_t *ctx, bool immediately) {
         inotify_rm_watch(opts->fd, opts->wd);
         close(opts->fd);
     }
-    pthread_join((pthread_t)ctx->handle, NULL);
+    thrJoin(ctx->handle, NULL);
     free(opts);
 }
 

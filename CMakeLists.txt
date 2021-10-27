@@ -1,4 +1,4 @@
-add_library(Colla STATIC 
+add_library(colla STATIC 
     socket.c 
     tracelog.c 
     http.c 
@@ -10,13 +10,14 @@ add_library(Colla STATIC
     file.c 
     dir.c 
     dirwatch.c
+    cthreads.c
 )
 
 if(MSVC)
-    target_link_libraries(Colla ws2_32.lib)
-    target_compile_options(Colla PRIVATE /W4)
+    target_link_libraries(colla ws2_32.lib)
+    target_compile_options(colla PRIVATE /W4)
 else()
-    target_link_libraries(Colla pthread)
-    target_compile_options(Colla PRIVATE -Wall -Wextra -Wpedantic)
-    target_compile_definitions(Colla PUBLIC _DEFAULT_SOURCE)
+    target_link_libraries(colla pthread)
+    target_compile_options(colla PRIVATE -Wall -Wextra -Wpedantic)
+    target_compile_definitions(colla PUBLIC _DEFAULT_SOURCE)
 endif()

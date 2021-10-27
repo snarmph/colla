@@ -28,6 +28,7 @@ extern "C" {
  */
 
 #include <stdbool.h>
+#include "cthreads.h"
 
 enum {
     DIRWATCH_FILE_ADDED,
@@ -48,7 +49,7 @@ typedef struct {
 } dirwatch_desc_t;
 
 typedef struct {
-    void *handle;
+    cthread_t handle;
     dirwatch_desc_t *desc;
 } dirwatch_t;
 
@@ -60,3 +61,7 @@ void waitForWatchDir(dirwatch_t *ctx);
 // stops dirwatch thread, if immediately is true, it will try to close it right away
 // otherwise it might wait for one last event 
 void stopWatchDir(dirwatch_t *ctx, bool immediately);
+
+#ifdef __cplusplus
+} // extern "C"
+#endif
