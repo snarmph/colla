@@ -15,6 +15,11 @@ typedef struct {
     void *handle;
 } file_t;
 
+typedef struct {
+    char *buf;
+    size_t len;
+} fread_buf_t;
+
 file_t fileOpen(const char *fname, int mode);
 void fileClose(file_t *ctx);
 
@@ -32,6 +37,12 @@ bool fileSeekEnd(file_t *ctx);
 void fileRewind(file_t *ctx);
 
 uint64_t fileTell(file_t *ctx);
+
+fread_buf_t fileReadWhole(const char *fname);
+fread_buf_t fileReadWholeFP(file_t *ctx);
+
+str_t fileReadWholeText(const char *fname);
+str_t fileReadWholeFPText(file_t *ctx);
 
 #ifdef __cplusplus
 } // extern "C"

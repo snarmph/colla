@@ -2,7 +2,6 @@
 
 #include <stdio.h>
 #include <string.h>
-#include <stdarg.h>
 #include <stdlib.h>
 
 #ifdef _WIN32 
@@ -50,7 +49,14 @@
 
 bool use_newline = true;
 
-void traceLog(LogLevel level, const char *fmt, ...) {
+void traceLog(int level, const char *fmt, ...) {
+    va_list args;
+    va_start(args, fmt);
+    traceLogVaList(level, fmt, args);
+    va_end(args);
+}
+
+void traceLogVaList(int level, const char *fmt, va_list args) {
     char buffer[MAX_TRACELOG_MSG_LENGTH];
     memset(buffer, 0, sizeof(buffer));
 
@@ -68,10 +74,7 @@ void traceLog(LogLevel level, const char *fmt, ...) {
     size_t offset = strlen(beg);
     strncpy(buffer, beg, sizeof(buffer));
 
-    va_list args;
-    va_start(args, fmt);
     vsnprintf(buffer + offset, sizeof(buffer) - offset, fmt, args);
-    va_end(args);
 
 #ifdef TLOG_VS
     OutputDebugStringA(buffer);

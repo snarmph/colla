@@ -158,3 +158,65 @@ uint64_t fileTell(file_t *ctx) {
     return (uint64_t)ftell((FILE*)ctx->handle);
 }
 #endif
+
+static fread_buf_t _readWholeInternal(file_t *ctx, bool null_terminated) {
+    fread_buf_t contents = {0};
+    uint64_t fsize = 0;
+
+    if(!fileSeekEnd(ctx)) {
+        err("file: couldn't read until end");
+        goto failed;
+    }
+
+    fsize = fileTell(ctx);
+    fileRewind(ctx);
+
+    contents.len = fsize;
+    contents.buf = malloc(fsize + null_terminated);
+    if(!contents.buf) {
+        err("file: couldn't allocate buffer");
+        goto failed;
+    }
+
+    size_t read = fileRead(ctx, contents.buf, fsize);
+    if(read != fsize) {
+        err("file: read wrong amount of bytes: %zu instead of %zu", read, fsize);
+        goto failed_free;
+    }
+
+    if(null_terminated) {
+        contents.buf[contents.len] = '\0';
+    }
+
+failed:
+    return contents;
+failed_free:
+    free(contents.buf);
+    return contents;    
+}
+
+fread_buf_t fileReadWhole(const char *fname) {
+    file_t fp = fileOpen(fname, FILE_READ);
+    fread_buf_t contents = fileReadWholeFP(&fp);
+    fileClose(&fp);
+    return contents;
+}
+
+fread_buf_t fileReadWholeFP(file_t *ctx) {
+    return _readWholeInternal(ctx, false);
+}
+
+str_t fileReadWholeText(const char *fname) {
+    file_t fp = fileOpen(fname, FILE_READ);
+    str_t contents = fileReadWholeFPText(&fp);
+    fileClose(&fp);
+    return contents;
+}
+
+str_t fileReadWholeFPText(file_t *ctx) {
+    fread_buf_t contents = _readWholeInternal(ctx, true);
+    return (str_t) {
+        .buf = contents.buf,
+        .len = contents.len
+    };
+}
