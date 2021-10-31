@@ -68,6 +68,9 @@ strview_t strSubview(str_t *ctx, size_t pos, size_t len);
 void strLower(str_t *ctx);
 str_t strToLower(str_t ctx);
 
+void strUpper(str_t *ctx);
+str_t strToUpper(str_t ctx);
+
 #ifdef STR_TESTING
 void strTest(void);
 #endif

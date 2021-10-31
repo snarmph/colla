@@ -7,21 +7,20 @@
 #include <windows.h>
 
 static DWORD _toWin32Access(int mode) {
-    switch(mode) {
-        case FILE_READ:  return GENERIC_READ;
-        case FILE_WRITE: return GENERIC_WRITE;
-        case FILE_BOTH:  return GENERIC_READ | GENERIC_WRITE;
-        default: fatal("unrecognized mode: %d", mode); return 0;
-    }
+    if(mode & FILE_READ) return GENERIC_READ;
+    if(mode & FILE_WRITE) return GENERIC_WRITE;
+    if(mode & FILE_BOTH) return GENERIC_READ | GENERIC_WRITE;
+    fatal("unrecognized access mode: %d", mode);
+    return 0;
 }
 
 static DWORD _toWin32Creation(int mode) {
-    switch(mode) {
-        case FILE_READ:  return OPEN_EXISTING;
-        case FILE_WRITE: return OPEN_ALWAYS;
-        case FILE_BOTH:  return OPEN_ALWAYS;
-        default: fatal("unrecognized mode: %d", mode); return 0;
-    }
+    if(mode & FILE_READ) return OPEN_EXISTING;
+    if(mode == (FILE_WRITE | FILE_CLEAR)) return CREATE_ALWAYS;
+    if(mode & FILE_WRITE) return OPEN_ALWAYS;
+    if(mode & FILE_BOTH) return OPEN_ALWAYS;
+    fatal("unrecognized creation mode: %d", mode);
+    return 0;
 }
 
 file_t fileOpen(const char *fname, int mode) {

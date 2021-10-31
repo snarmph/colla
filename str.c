@@ -263,6 +263,18 @@ str_t strToLower(str_t ctx) {
     return str;
 }
 
+void strUpper(str_t *ctx) {
+    for(size_t i = 0; i < ctx->len; ++i) {
+        ctx->buf[i] = (char)toupper(ctx->buf[i]);
+    }
+}
+
+str_t strToUpper(str_t ctx) {
+    str_t str = strDup(ctx);
+    strUpper(&str);
+    return str;
+}
+
 // == STRVIEW_T ====================================================
 
 strview_t strvInit(const char *cstr) {

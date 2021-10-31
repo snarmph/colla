@@ -81,6 +81,15 @@ dir_t dirOpen(const char *path) {
     return dir;
 }
 
+void dirClose(dir_t ctx) {
+    free(ctx);
+}
+
+bool dirValid(dir_t ctx) {
+    _dir_internal_t *dir = (_dir_internal_t*)ctx;
+    return dir->handle != INVALID_HANDLE_VALUE;
+}
+
 dir_entry_t *dirNext(dir_t ctx) {
     _dir_internal_t *dir = (_dir_internal_t*)ctx;
     strFree(&dir->cur.name);
@@ -88,10 +97,6 @@ dir_entry_t *dirNext(dir_t ctx) {
     dir->cur = dir->next;
     _getNext(dir);
     return &dir->cur;
-}
-
-void dirClose(dir_t ctx) {
-    free(ctx);
 }
 
 #else
@@ -125,6 +130,11 @@ void dirClose(dir_t ctx) {
         closedir(in->dir);
         free(in);
     }
+}
+
+bool dirValid(dir_t ctx) {
+    _dir_internal_t *dir = (_dir_internal_t*)ctx;
+    return dir->handle != NULL;
 }
 
 dir_entry_t *dirNext(dir_t ctx) {
