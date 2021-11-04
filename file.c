@@ -92,6 +92,7 @@ uint64_t fileTell(file_t *ctx) {
 
 #else
 #include <stdio.h>
+#include <stdlib.h>
 #include <errno.h>
 #include <string.h>
 
@@ -208,6 +209,10 @@ fread_buf_t fileReadWholeFP(file_t *ctx) {
 
 str_t fileReadWholeText(const char *fname) {
     file_t fp = fileOpen(fname, FILE_READ);
+    if(!fileIsValid(&fp)) {
+        err("couldn't open file %s -> %d", fname);
+        return strInit();
+    }
     str_t contents = fileReadWholeFPText(&fp);
     fileClose(&fp);
     return contents;
