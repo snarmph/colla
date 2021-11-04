@@ -8,7 +8,10 @@ extern "C" {
 #include "str.h"
 
 enum {
-    FILE_READ, FILE_WRITE, FILE_BOTH
+    FILE_READ  = 1 << 0, 
+    FILE_WRITE = 1 << 1, 
+    FILE_CLEAR = 1 << 2, 
+    FILE_BOTH  = 1 << 3
 };
 
 typedef struct {
