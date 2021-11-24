@@ -97,7 +97,7 @@ typedef struct {
     int status_code;
     field_vec_t fields;
     http_version_t version;
-    char *body;
+    str_t body;
 } http_response_t;
 
 http_response_t resInit(void);
@@ -112,7 +112,7 @@ void resParseFields(http_response_t *ctx, str_istream_t *in);
 // == HTTP CLIENT =============================================================
 
 typedef struct {
-    char *host_name;
+    str_t host_name;
     uint16_t port;
     socket_t socket;
 } http_client_t;

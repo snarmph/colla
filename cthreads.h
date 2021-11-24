@@ -38,5 +38,30 @@ bool mtxTryLock(cmutex_t ctx);
 bool mtxUnlock(cmutex_t ctx);
 
 #ifdef __cplusplus
+// small c++ class to make mutexes easier to use
+struct lock_t {
+    inline lock_t(cmutex_t mutex)
+        : mutex(mutex) {
+        if (mtxValid(mutex)) {
+            mtxLock(mutex);
+        }
+    }
+
+    inline ~lock_t() {
+        unlock();
+    }
+
+    inline void unlock() {
+        if (mtxValid(mutex)) {
+            mtxUnlock(mutex);
+        }
+        mutex = 0;
+    }
+    
+    cmutex_t mutex;
+};
+#endif
+
+#ifdef __cplusplus
 } // extern "C"
 #endif

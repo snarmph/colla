@@ -9,8 +9,6 @@ static int initialize_count = 0;
 #endif
 
 #if SOCK_WINDOWS
-#include <ws2tcpip.h>
-
 static bool _win_skInit();
 static bool _win_skCleanup();
 static int _win_skGetError();
@@ -113,7 +111,7 @@ bool skBind(socket_t sock, const char *ip, uint16_t port) {
     return skBindPro(sock, (sk_addr_t *) &addr, sizeof(addr));
 }
 
-bool skBindPro(socket_t sock, const sk_addr_t *name, socket_len_t namelen) {
+bool skBindPro(socket_t sock, const sk_addr_t *name, sk_len_t namelen) {
     return bind(sock, name, namelen) != SOCKET_ERROR;
 }
 
@@ -127,11 +125,11 @@ bool skListenPro(socket_t sock, int backlog) {
 
 socket_t skAccept(socket_t sock) {
     sk_addrin_t addr;
-    socket_len_t addr_size = (socket_len_t)sizeof(addr);
+    sk_len_t addr_size = (sk_len_t)sizeof(addr);
     return skAcceptPro(sock, (sk_addr_t *) &addr, &addr_size);
 }
 
-socket_t skAcceptPro(socket_t sock, sk_addr_t *addr, socket_len_t *addrlen) {
+socket_t skAcceptPro(socket_t sock, sk_addr_t *addr, sk_len_t *addrlen) {
     return accept(sock, addr, addrlen);
 }
 
@@ -152,40 +150,40 @@ bool skConnect(socket_t sock, const char *server, unsigned short server_port) {
     return skConnectPro(sock, (sk_addr_t *) &addr, sizeof(addr));
 }
 
-bool skConnectPro(socket_t sock, const sk_addr_t *name, socket_len_t namelen) {
+bool skConnectPro(socket_t sock, const sk_addr_t *name, sk_len_t namelen) {
     return connect(sock, name, namelen) != SOCKET_ERROR;
 }
 
-int skSend(socket_t sock, const char *buf, int len) {
+int skSend(socket_t sock, const void *buf, int len) {
     return skSendPro(sock, buf, len, 0);
 }
 
-int skSendPro(socket_t sock, const char *buf, int len, int flags) {
+int skSendPro(socket_t sock, const void *buf, int len, int flags) {
     return send(sock, buf, len, flags);
 }
 
-int skSendTo(socket_t sock, const char *buf, int len, const sk_addrin_t *to) {
+int skSendTo(socket_t sock, const void *buf, int len, const sk_addrin_t *to) {
     return skSendToPro(sock, buf, len, 0, (sk_addr_t*) to, sizeof(sk_addrin_t));
 }
 
-int skSendToPro(socket_t sock, const char *buf, int len, int flags, const sk_addr_t *to, int tolen) {
+int skSendToPro(socket_t sock, const void *buf, int len, int flags, const sk_addr_t *to, int tolen) {
     return sendto(sock, buf, len, flags, to, tolen);
 }
 
-int skReceive(socket_t sock, char *buf, int len) {
+int skReceive(socket_t sock, void *buf, int len) {
     return skReceivePro(sock, buf, len, 0);
 }
 
-int skReceivePro(socket_t sock, char *buf, int len, int flags) {
+int skReceivePro(socket_t sock, void *buf, int len, int flags) {
     return recv(sock, buf, len, flags);
 }
 
-int skReceiveFrom(socket_t sock, char *buf, int len, sk_addrin_t *from) {
-    socket_len_t fromlen = sizeof(sk_addr_t);
+int skReceiveFrom(socket_t sock, void *buf, int len, sk_addrin_t *from) {
+    sk_len_t fromlen = sizeof(sk_addr_t);
     return skReceiveFromPro(sock, buf, len, 0, (sk_addr_t*)from, &fromlen);
 }
 
-int skReceiveFromPro(socket_t sock, char *buf, int len, int flags, sk_addr_t *from, socket_len_t *fromlen) {
+int skReceiveFromPro(socket_t sock, void *buf, int len, int flags, sk_addr_t *from, sk_len_t *fromlen) {
     return recvfrom(sock, buf, len, flags, from, fromlen);
 }
 

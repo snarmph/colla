@@ -2,8 +2,7 @@
 #include "tracelog.h"
 
 #ifdef _WIN32
-#define VC_EXTRALEAN
-#include <windows.h>
+#include "win32_slim.h"
 #include <stdlib.h>
 #include <assert.h>
 
@@ -107,10 +106,10 @@ dir_entry_t *dirNext(dir_t ctx) {
 // taken from https://sites.uclouvain.be/SystInfo/usr/include/dirent.h.html
 // hopefully shouldn't be needed
 #ifndef DT_DIR
-#define DT_DIR 4
+    #define DT_DIR 4
 #endif
 #ifndef DT_REG
-#define DT_REG 8
+    #define DT_REG 8
 #endif
 
 typedef struct {
@@ -134,7 +133,7 @@ void dirClose(dir_t ctx) {
 
 bool dirValid(dir_t ctx) {
     _dir_internal_t *dir = (_dir_internal_t*)ctx;
-    return dir->handle != NULL;
+    return dir->dir != NULL;
 }
 
 dir_entry_t *dirNext(dir_t ctx) {

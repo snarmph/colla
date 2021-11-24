@@ -3,8 +3,8 @@
 #include "tracelog.h"
 
 #ifdef _WIN32
-#define VC_EXTRALEAN
-#include <windows.h>
+#include "win32_slim.h"
+#include <stdlib.h>
 
 static DWORD _toWin32Access(int mode) {
     if(mode & FILE_READ) return GENERIC_READ;
@@ -209,7 +209,7 @@ fread_buf_t fileReadWholeFP(file_t *ctx) {
 str_t fileReadWholeText(const char *fname) {
     file_t fp = fileOpen(fname, FILE_READ);
     if(!fileIsValid(&fp)) {
-        err("couldn't open file %s -> %d", fname);
+        err("couldn't open file %s", fname);
         return strInit();
     }
     str_t contents = fileReadWholeFPText(&fp);

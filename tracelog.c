@@ -14,8 +14,7 @@
             #define TLOG_NO_COLOURS
         #endif
 
-        #define VC_EXTRALEAN
-        #include <windows.h>
+        #include "win32_slim.h"
     #else
         #error "can't use TLOG_VS if not on windows"
     #endif

@@ -7,6 +7,8 @@
 #ifdef _WIN32
 #define _BUFSZ 128
 
+#include <lmcons.h>
+
 // modified from netbsd source http://cvsweb.netbsd.org/bsdweb.cgi/pkgsrc/pkgtools/libnbcompat/files/getdelim.c?only_with_tag=MAIN
 ssize_t getdelim(char **buf, size_t *bufsz, int delimiter, FILE *fp) {
     char *ptr, *eptr;
@@ -64,4 +66,30 @@ ssize_t getdelim(char **buf, size_t *bufsz, int delimiter, FILE *fp) {
 ssize_t getline(char **line_ptr, size_t *n, FILE *stream) {
     return getdelim(line_ptr, n, '\n', stream);
 }
+
+str_t getUserName() {    
+    char buf[UNLEN + 1];
+    DWORD sz = sizeof(buf);
+    BOOL res = GetUserNameA(buf, &sz);
+    if(!res) {
+        return strInit();
+    }
+    return strInitBuf(buf, sz);
+}
+
+#else
+
+#include <unistd.h>
+#include <stdio.h>
+#include <errno.h>
+
+str_t getUserName() {
+    char buf[255];
+    int res = getlogin_r(buf, sizeof(buf));
+    if(res) {
+        return strInit();
+    }
+    return strInitStr(buf);
+}
+
 #endif

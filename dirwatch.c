@@ -1,12 +1,12 @@
 #include "dirwatch.h"
 
 #include <stdint.h>
+#include <stdlib.h>
 #include <assert.h>
 #include "tracelog.h"
 
 #ifdef _WIN32
-#define VC_EXTRALEAN
-#include <windows.h>
+#include "win32_slim.h"
 #include "str.h"
 
 typedef struct {
@@ -177,8 +177,6 @@ void stopWatchDir(dirwatch_t *ctx, bool immediately) {
 
 #else
 #include <sys/inotify.h>
-#include <stdio.h>
-#include <stdlib.h> // malloc
 #include <unistd.h> // read
 #include <string.h>
 #include <errno.h>

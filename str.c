@@ -10,8 +10,7 @@
 #include "tracelog.h"
 
 #ifdef _WIN32
-#define VC_EXTRALEAN
-#include <windows.h>
+#include "win32_slim.h"
 #else
 #include <iconv.h>
 #endif

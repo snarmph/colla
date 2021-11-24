@@ -6,8 +6,8 @@ typedef struct {
 } _thr_internal_t;
 
 #ifdef _WIN32
-#define VC_EXTRALEAN
-#include <windows.h>
+#include "win32_slim.h"
+#include <stdlib.h>
 
 // == THREAD ===========================================
 

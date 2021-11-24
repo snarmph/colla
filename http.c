@@ -85,7 +85,7 @@ void reqSetField(http_request_t *ctx, const char *key, const char *value) {
 }
 
 void reqSetUri(http_request_t *ctx, const char *uri) {
-    if(uri == NULL) return;
+    if (uri == NULL) return;
     size_t len = strlen(uri);
     if(uri[0] != '/') {
         len += 1;
@@ -139,9 +139,7 @@ str_t reqString(http_request_t *ctx) {
 // == HTTP RESPONSE ===========================================================
 
 http_response_t resInit() {
-    http_response_t res;
-    memset(&res, 0, sizeof(res));
-    return res;
+    return (http_response_t) {0};
 }   
 
 void resFree(http_response_t *ctx) {
@@ -150,7 +148,7 @@ void resFree(http_response_t *ctx) {
         free(ctx->fields.buf[i].value);
     }
     field_vecFree(&ctx->fields);
-    free(ctx->body);
+    strFree(&ctx->body);
     memset(ctx, 0, sizeof(http_response_t));
 }
 
@@ -195,8 +193,8 @@ void resParse(http_response_t *ctx, const char *data) {
     const char *tran_encoding = resGetField(ctx, "transfer-encoding");
     if(tran_encoding == NULL || stricmp(tran_encoding, "chunked")  != 0) {
         strview_t body = istrGetviewLen(&in, 0, SIZE_MAX);
-        free(ctx->body);
-        ctx->body = strvCopy(body).buf;
+        strFree(&ctx->body);
+        ctx->body = strvCopy(body);
     }
     else {
         fatal("chunked encoding not implemented yet");
@@ -233,14 +231,13 @@ void resParseFields(http_response_t *ctx, str_istream_t *in) {
 // == HTTP CLIENT =============================================================
 
 http_client_t hcliInit() {
-    http_client_t client;
-    memset(&client, 0, sizeof(client));
-    client.port = 80;
-    return client;
+    return (http_client_t) {
+        .port = 80,
+    };
 }
 
 void hcliFree(http_client_t *ctx) {
-    free(ctx->host_name);
+    strFree(&ctx->host_name);
     memset(ctx, 0, sizeof(http_client_t));
 }
 
@@ -248,7 +245,7 @@ void hcliSetHost(http_client_t *ctx, const char *hostname) {
     strview_t hostview = strvInit(hostname);
     // if the hostname starts with http:// (case insensitive)
     if(strvICompare(strvSubstr(hostview, 0, 7), strvInit("http://")) == 0) {
-        ctx->host_name = strvCopy(strvSubstr(hostview, 7, SIZE_MAX)).buf;
+        ctx->host_name = strvCopy(strvSubstr(hostview, 7, SIZE_MAX));
     }
     else if(strvICompare(strvSubstr(hostview, 0, 8), strvInit("https://")) == 0) {
         err("HTTPS protocol not yet supported");
@@ -256,13 +253,16 @@ void hcliSetHost(http_client_t *ctx, const char *hostname) {
     }
     else {
         // undefined protocol, use HTTP
-        ctx->host_name = strvCopy(hostview).buf;
+        ctx->host_name = strvCopy(hostview);
     }
 }
 
 http_response_t hcliSendRequest(http_client_t *ctx, http_request_t *req) {
+    if (strBack(&ctx->host_name) == '/') {
+        strPop(&ctx->host_name);
+    }
     if(!reqHasField(req, "Host")) {
-        reqSetField(req, "Host", ctx->host_name);
+        reqSetField(req, "Host", ctx->host_name.buf);
     }
     if(!reqHasField(req, "Content-Length")) {
         if(req->body) {
@@ -297,7 +297,7 @@ http_response_t hcliSendRequest(http_client_t *ctx, http_request_t *req) {
         goto error;
     }
 
-    if(skConnect(ctx->socket, ctx->host_name, ctx->port)) {
+    if(skConnect(ctx->socket, ctx->host_name.buf, ctx->port)) {
         req_str = reqString(req);
         if(req_str.len == 0) {
             err("couldn't get string from request");
@@ -327,6 +327,9 @@ http_response_t hcliSendRequest(http_client_t *ctx, http_request_t *req) {
         }
         
         resParse(&res, received.buf);
+    }
+    else {
+        err("Couldn't connect to host %s -> %s", ctx->host_name, skGetErrorString());
     }
 
     if(!skClose(ctx->socket)) {

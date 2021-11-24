@@ -2,6 +2,7 @@
 
 #ifdef __cplusplus
 extern "C" {
+#include <string>
 #endif
 
 #include <stdint.h>
@@ -9,13 +10,17 @@ extern "C" {
 #include <stddef.h>
 #include <limits.h>
 #include <wchar.h>
-// #include "strview.h"
 
 #define STRV_NOT_FOUND SIZE_MAX
 
-typedef struct {
+typedef struct str_t {
     char *buf;
     size_t len;
+#ifdef __cplusplus
+    inline operator std::string() const {
+        return std::string(buf, len);
+    }
+#endif
 } str_t;
 
 typedef struct {
