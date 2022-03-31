@@ -23,9 +23,16 @@ static DWORD _toWin32Creation(int mode) {
     return 0;
 }
 
+bool fileExists(const char *fname) {
+    DWORD dwAttrib = GetFileAttributesA(fname);
+
+    return (dwAttrib != INVALID_FILE_ATTRIBUTES && 
+           !(dwAttrib & FILE_ATTRIBUTE_DIRECTORY));
+}
+
 file_t fileOpen(const char *fname, int mode) {
     return (file_t) {
-        .handle = CreateFile(fname, 
+        .handle = CreateFileA(fname, 
                              _toWin32Access(mode), 
                              0, 
                              NULL, 
@@ -94,6 +101,7 @@ uint64_t fileTell(file_t *ctx) {
 #include <stdlib.h>
 #include <errno.h>
 #include <string.h>
+#include <unistd.h>
 
 const char *_toStdioMode(int mode) {
     switch(mode) {
@@ -102,6 +110,10 @@ const char *_toStdioMode(int mode) {
         case FILE_WRITE: return "wb";
         default: fatal("mode not recognized: %d", mode); return "";
     }
+}
+
+bool fileExists(const char *fname) {
+    return access(fname, F_OK) == 0;
 }
 
 file_t fileOpen(const char *fname, int mode) {
@@ -118,7 +130,6 @@ void fileClose(file_t *ctx) {
 }
 
 bool fileIsValid(file_t *ctx) {
-    info("handle: %p", ctx->handle);
     return ctx->handle != NULL;
 }
 

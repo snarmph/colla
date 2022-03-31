@@ -75,7 +75,7 @@ str_ostream_t ostrInitStr(const char *buf, size_t len);
 void ostrFree(str_ostream_t *ctx);
 void ostrClear(str_ostream_t *ctx);
 str_t ostrMove(str_ostream_t *ctx);
-
+    
 char ostrBack(str_ostream_t *ctx);
 str_t ostrAsStr(str_ostream_t *ctx);
 strview_t ostrAsView(str_ostream_t *ctx);

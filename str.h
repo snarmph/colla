@@ -2,7 +2,6 @@
 
 #ifdef __cplusplus
 extern "C" {
-#include <string>
 #endif
 
 #include <stdint.h>
@@ -16,11 +15,6 @@ extern "C" {
 typedef struct str_t {
     char *buf;
     size_t len;
-#ifdef __cplusplus
-    inline operator std::string() const {
-        return std::string(buf, len);
-    }
-#endif
 } str_t;
 
 typedef struct {
@@ -128,7 +122,6 @@ size_t strvFindFirstNot(strview_t ctx, char c, size_t from);
 size_t strvFindFirstNotOf(strview_t ctx, strview_t view, size_t from);
 size_t strvFindLastNot(strview_t ctx, char c, size_t from);
 size_t strvFindLastNotOf(strview_t ctx, strview_t view, size_t from);
-
 
 #ifdef __cplusplus
 } // extern "C"

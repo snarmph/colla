@@ -6,6 +6,7 @@
 
 #ifdef _WIN32 
     #pragma warning(disable:4996) // _CRT_SECURE_NO_WARNINGS.
+    #include "win32_slim.h"
 #endif
 
 #ifdef TLOG_VS
@@ -74,6 +75,10 @@ void traceLogVaList(int level, const char *fmt, va_list args) {
     strncpy(buffer, beg, sizeof(buffer));
 
     vsnprintf(buffer + offset, sizeof(buffer) - offset, fmt, args);
+
+#ifdef _WIN32
+    SetConsoleOutputCP(CP_UTF8);
+#endif
 
 #ifdef TLOG_VS
     OutputDebugStringA(buffer);

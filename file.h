@@ -23,6 +23,8 @@ typedef struct {
     size_t len;
 } fread_buf_t;
 
+bool fileExists(const char *fname);
+
 file_t fileOpen(const char *fname, int mode);
 void fileClose(file_t *ctx);
 

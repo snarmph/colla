@@ -90,6 +90,7 @@ str_t strFromWCHAR(const wchar_t *src, size_t len) {
     char *src_temp = (char*)src;
     size_t lost = iconv(cd, &src_temp, &actual_len, &dest_temp, &dest_left);
     assert(lost != ((size_t)-1));
+    (void)lost;
 
     dest_len -= dest_left;
     dest = realloc(dest, dest_len + 1);
@@ -133,6 +134,7 @@ wchar_t *strToWCHAR(str_t ctx) {
     char *src_temp = ctx.buf;
     size_t lost = iconv(cd, &src_temp, &ctx.len, &dest_temp, &dest_left);
     assert(lost != ((size_t)-1));
+    (void)lost;
 
     dest_len -= dest_left;
     dest = realloc(dest, dest_len + 1);
