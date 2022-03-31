@@ -7,16 +7,16 @@
 #ifdef _WIN32 
     #pragma warning(disable:4996) // _CRT_SECURE_NO_WARNINGS.
     #include "win32_slim.h"
-#endif
-
-#ifdef TLOG_VS
-    #ifdef _WIN32
+    #ifndef TLOG_VS
+        #define TLOG_WIN32_NO_VS
         #ifndef TLOG_NO_COLOURS
             #define TLOG_NO_COLOURS
         #endif
+    #endif
+#endif
 
-        #include "win32_slim.h"
-    #else
+#ifdef TLOG_VS
+    #ifndef _WIN32
         #error "can't use TLOG_VS if not on windows"
     #endif
 #endif
@@ -49,6 +49,22 @@
 
 bool use_newline = true;
 
+#ifdef TLOG_WIN32_NO_VS
+static void setLevelColour(int level) {
+    WORD attribute = 15;
+    switch (level) {
+        case LogDebug:   attribute = 1; break; 
+        case LogInfo:    attribute = 2; break;
+        case LogWarning: attribute = 6; break;
+        case LogError:   attribute = 4; break;
+        case LogFatal:   attribute = 4; break;
+    }
+
+    HANDLE hc = GetStdHandle(STD_OUTPUT_HANDLE);
+    SetConsoleTextAttribute(hc, attribute);
+}
+#endif
+
 void traceLog(int level, const char *fmt, ...) {
     va_list args;
     va_start(args, fmt);
@@ -71,18 +87,26 @@ void traceLogVaList(int level, const char *fmt, va_list args) {
         default:         beg = "";                              break;
     }
 
-    size_t offset = strlen(beg);
+    size_t offset = 0;
+
+#ifndef TLOG_WIN32_NO_VS
+    offset = strlen(beg);
     strncpy(buffer, beg, sizeof(buffer));
+#endif
 
     vsnprintf(buffer + offset, sizeof(buffer) - offset, fmt, args);
 
-#ifdef _WIN32
-    SetConsoleOutputCP(CP_UTF8);
-#endif
-
-#ifdef TLOG_VS
+#if defined(TLOG_VS)
     OutputDebugStringA(buffer);
     if(use_newline) OutputDebugStringA("\n");
+#elif defined(TLOG_WIN32_NO_VS)
+    SetConsoleOutputCP(CP_UTF8);
+    setLevelColour(level);
+    printf("%s", beg);
+    // set back to white
+    setLevelColour(LogTrace);
+    printf("%s", buffer);
+    if(use_newline) puts("");
 #else
     printf("%s", buffer);
     if(use_newline) puts("");
