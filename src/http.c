@@ -7,41 +7,38 @@
 #include "os.h"
 #include "tracelog.h"
 
-#define T http_field_t
-#define VEC_SHORT_NAME field_vec
-#define VEC_DISABLE_ERASE_WHEN
-#define VEC_NO_DECLARATION
 #include "vec.h"
 
 // == INTERNAL ================================================================
 
-static void _setField(field_vec_t *fields, const char *key, const char *value) {
-    // search if the field already exists
-    for(size_t i = 0; i < fields->size; ++i) {
-        if(stricmp(fields->buf[i].key, key) == 0) {
-            // replace value
-            char **curval = &fields->buf[i].value;
-            size_t cur = strlen(*curval);
-            size_t new = strlen(value);
-            if(new > cur) {
-                *curval = realloc(*curval, new + 1);
+static void _setField(vec(http_field_t) *fields_vec, const char *key, const char *value) {
+    vec(http_field_t) fields = *fields_vec;
+
+    for (uint32 i = 0; i < vecLen(fields); ++i) {
+        if (stricmp(fields[i].key, key) == 0) {
+            char **curval = &fields[i].value;
+            usize curlen = strlen(*curval);
+            usize newlen = strlen(value);
+            if(newlen > curlen) {
+                *curval = (char *)realloc(*curval, newlen + 1);
             }
-            memcpy(*curval, value, new);
-            (*curval)[new] = '\0';
+            memcpy(*curval, value, newlen);
+            (*curval)[newlen] = '\0';
             return;
         }
     }
+
     // otherwise, add it to the list
     http_field_t field;
-    size_t klen = strlen(key);
-    size_t vlen = strlen(value);
-    field.key = malloc(klen + 1);
-    field.value = malloc(vlen + 1);
+    usize klen = strlen(key);
+    usize vlen = strlen(value);
+    field.key = (char *)malloc(klen + 1);
+    field.value = (char *)malloc(vlen + 1);
     memcpy(field.key, key, klen);
     memcpy(field.value, value, vlen);
     field.key[klen] = field.value[vlen] = '\0';
 
-    field_vecPush(fields, field);
+    vecAppend(*fields_vec, field);
 }
 
 // == HTTP VERSION ============================================================
@@ -55,25 +52,25 @@ int httpVerNumber(http_version_t ver) {
 http_request_t reqInit() {
     http_request_t req;
     memset(&req, 0, sizeof(req));
-    reqSetUri(&req, "/");
+    reqSetUri(&req, strvInit("/"));
     req.version = (http_version_t){1, 1};
     return req;
 }
 
 void reqFree(http_request_t *ctx) {
-    for(size_t i = 0; i < ctx->fields.size; ++i) {
-        free(ctx->fields.buf[i].key);
-        free(ctx->fields.buf[i].value);
+    for (uint32 i = 0; i < vecLen(ctx->fields); ++i) {
+        free(ctx->fields[i].key);
+        free(ctx->fields[i].value);
     }
-    field_vecFree(&ctx->fields);
+    vecFree(ctx->fields);
     free(ctx->uri);
     free(ctx->body);
     memset(ctx, 0, sizeof(http_request_t));
 }
 
 bool reqHasField(http_request_t *ctx, const char *key) {
-    for(size_t i = 0; i < ctx->fields.size; ++i) {
-        if(stricmp(ctx->fields.buf[i].key, key) == 0) {
+    for(uint32 i = 0; i < vecLen(ctx->fields); ++i) {
+        if(stricmp(ctx->fields[i].key, key) == 0) {
             return true;
         }
     }
@@ -84,20 +81,17 @@ void reqSetField(http_request_t *ctx, const char *key, const char *value) {
     _setField(&ctx->fields, key, value);
 }
 
-void reqSetUri(http_request_t *ctx, const char *uri) {
-    if (uri == NULL) return;
-    size_t len = strlen(uri);
-    if(uri[0] != '/') {
-        len += 1;
-        ctx->uri = realloc(ctx->uri, len + 1);
+void reqSetUri(http_request_t *ctx, strview_t uri) {
+    if (strvIsEmpty(uri)) return;
+    free(ctx->uri);
+    if (uri.buf[0] != '/') {
+        ctx->uri = (char *)realloc(ctx->uri, uri.len + 1);
         ctx->uri[0] = '/';
-        memcpy(ctx->uri + 1, uri, len);
-        ctx->uri[len] = '\0';
+        memcpy(ctx->uri + 1, uri.buf, uri.len);
+        ctx->uri[uri.len] = '\0';
     }
     else {
-        ctx->uri = realloc(ctx->uri, len + 1);
-        memcpy(ctx->uri, uri, len);
-        ctx->uri[len] = '\0';
+        ctx->uri = strvCopy(uri).buf;
     }
 }
 
@@ -118,8 +112,8 @@ str_ostream_t reqPrepare(http_request_t *ctx) {
         method, ctx->uri, ctx->version.major, ctx->version.minor
     );
 
-    for(size_t i = 0; i < ctx->fields.size; ++i) {
-        ostrPrintf(&out, "%s: %s\r\n", ctx->fields.buf[i].key, ctx->fields.buf[i].value);
+    for(uint32 i = 0; i < vecLen(ctx->fields); ++i) {
+        ostrPrintf(&out, "%s: %s\r\n", ctx->fields[i].key, ctx->fields[i].value);
     }
 
     ostrAppendview(&out, strvInit("\r\n"));
@@ -133,7 +127,7 @@ error:
 
 str_t reqString(http_request_t *ctx) {
     str_ostream_t out = reqPrepare(ctx);
-    return ostrMove(&out);
+    return ostrAsStr(out);
 }
 
 // == HTTP RESPONSE ===========================================================
@@ -143,18 +137,18 @@ http_response_t resInit() {
 }   
 
 void resFree(http_response_t *ctx) {
-    for(size_t i = 0; i < ctx->fields.size; ++i) {
-        free(ctx->fields.buf[i].key);
-        free(ctx->fields.buf[i].value);
+    for(uint32 i = 0; i < vecLen(ctx->fields); ++i) {
+        free(ctx->fields[i].key);
+        free(ctx->fields[i].value);
     }
-    field_vecFree(&ctx->fields);
-    strFree(&ctx->body);
+    vecFree(ctx->fields);
+    vecFree(ctx->body);
     memset(ctx, 0, sizeof(http_response_t));
 }
 
 bool resHasField(http_response_t *ctx, const char *key) {
-    for(size_t i = 0; i < ctx->fields.size; ++i) {
-        if(stricmp(ctx->fields.buf[i].key, key) == 0) {
+    for(uint32 i = 0; i < vecLen(ctx->fields); ++i) {
+        if(stricmp(ctx->fields[i].key, key) == 0) {
             return true;
         }
     }
@@ -162,9 +156,9 @@ bool resHasField(http_response_t *ctx, const char *key) {
 }
 
 const char *resGetField(http_response_t *ctx, const char *field) {
-    for(size_t i = 0; i < ctx->fields.size; ++i) {
-        if(stricmp(ctx->fields.buf[i].key, field) == 0) {
-            return ctx->fields.buf[i].value;
+    for(uint32 i = 0; i < vecLen(ctx->fields); ++i) {
+        if(stricmp(ctx->fields[i].key, field) == 0) {
+            return ctx->fields[i].value;
         }
     }
     return NULL;
@@ -183,7 +177,7 @@ void resParse(http_response_t *ctx, const char *data) {
     istrGetu8(&in, &ctx->version.major);
     istrSkip(&in, 1); // skip .
     istrGetu8(&in, &ctx->version.minor);
-    istrGeti32(&in, &ctx->status_code);
+    istrGeti32(&in, (int32*)&ctx->status_code);
 
     istrIgnore(&in, '\n');
     istrSkip(&in, 1); // skip \n
@@ -193,8 +187,9 @@ void resParse(http_response_t *ctx, const char *data) {
     const char *tran_encoding = resGetField(ctx, "transfer-encoding");
     if(tran_encoding == NULL || stricmp(tran_encoding, "chunked")  != 0) {
         strview_t body = istrGetviewLen(&in, 0, SIZE_MAX);
-        strFree(&ctx->body);
-        ctx->body = strvCopy(body);
+        vecClear(ctx->body);
+        vecReserve(ctx->body, body.len);
+        memcpy(ctx->body, body.buf, body.len);
     }
     else {
         fatal("chunked encoding not implemented yet");
@@ -207,10 +202,10 @@ void resParseFields(http_response_t *ctx, str_istream_t *in) {
     do {
         line = istrGetview(in, '\r');
 
-        size_t pos = strvFind(line, ':', 0);
+        usize pos = strvFind(line, ':', 0);
         if(pos != STRV_NOT_FOUND) {
-            strview_t key = strvSubstr(line, 0, pos);
-            strview_t value = strvSubstr(line, pos + 2, SIZE_MAX);
+            strview_t key = strvSub(line, 0, pos);
+            strview_t value = strvSub(line, pos + 2, SIZE_MAX);
 
             char *key_str = NULL;
             char *value_str = NULL;
@@ -237,29 +232,28 @@ http_client_t hcliInit() {
 }
 
 void hcliFree(http_client_t *ctx) {
-    strFree(&ctx->host_name);
+    strFree(ctx->host_name);
     memset(ctx, 0, sizeof(http_client_t));
 }
 
-void hcliSetHost(http_client_t *ctx, const char *hostname) {
-    strview_t hostview = strvInit(hostname);
+void hcliSetHost(http_client_t *ctx, strview_t hostname) {
     // if the hostname starts with http:// (case insensitive)
-    if(strvICompare(strvSubstr(hostview, 0, 7), strvInit("http://")) == 0) {
-        ctx->host_name = strvCopy(strvSubstr(hostview, 7, SIZE_MAX));
+    if(strvICompare(strvSub(hostname, 0, 7), strvInit("http://")) == 0) {
+        ctx->host_name = strvCopy(strvSub(hostname, 7, SIZE_MAX));
     }
-    else if(strvICompare(strvSubstr(hostview, 0, 8), strvInit("https://")) == 0) {
+    else if(strvICompare(strvSub(hostname, 0, 8), strvInit("https://")) == 0) {
         err("HTTPS protocol not yet supported");
         return;
     }
     else {
         // undefined protocol, use HTTP
-        ctx->host_name = strvCopy(hostview);
+        ctx->host_name = strvCopy(hostname);
     }
 }
 
 http_response_t hcliSendRequest(http_client_t *ctx, http_request_t *req) {
-    if (strBack(&ctx->host_name) == '/') {
-        strPop(&ctx->host_name);
+    if (strBack(ctx->host_name) == '/') {
+        ctx->host_name.buf[--ctx->host_name.len] = '\0';
     }
     if(!reqHasField(req, "Host")) {
         reqSetField(req, "Host", ctx->host_name.buf);
@@ -269,7 +263,7 @@ http_response_t hcliSendRequest(http_client_t *ctx, http_request_t *req) {
             str_ostream_t out = ostrInitLen(20);
             ostrAppendu64(&out, strlen(req->body));
             reqSetField(req, "Content-Length", out.buf);
-            ostrFree(&out);
+            ostrFree(out);
         }
         else {
             reqSetField(req, "Content-Length", "0");
@@ -321,9 +315,9 @@ http_response_t hcliSendRequest(http_client_t *ctx, http_request_t *req) {
         } while(read != 0);
 
         // if the data received is not null terminated
-        if(*(received.buf + received.size) != '\0') {
+        if(*(received.buf + received.len) != '\0') {
             ostrPutc(&received, '\0');
-            received.size--;
+            received.len--;
         }
         
         resParse(&res, received.buf);
@@ -341,12 +335,12 @@ error:
         err("couldn't clean up sockets %s", skGetErrorString());
     }
 skopen_error:
-    strFree(&req_str);
-    ostrFree(&received);
+    strFree(req_str);
+    ostrFree(received);
     return res;
 }
 
-http_response_t httpGet(const char *hostname, const char *uri) {
+http_response_t httpGet(strview_t hostname, strview_t uri) {
     http_request_t request = reqInit();
     request.method = REQ_GET;
     reqSetUri(&request, uri);
@@ -362,3 +356,17 @@ http_response_t httpGet(const char *hostname, const char *uri) {
     return res;
 }
 
+url_split_t urlSplit(strview_t uri) {
+    url_split_t out = {0};
+
+    if (strvStartsWithView(uri, strvInit("https://"))) {
+        uri = strvRemovePrefix(uri, 8);
+    }
+    else if (strvStartsWithView(uri, strvInit("http://"))) {
+        uri = strvRemovePrefix(uri, 7);
+    }
+
+    out.host = strvSub(uri, 0, strvFind(uri, '/', 0));
+    out.uri = strvSub(uri, out.host.len, SIZE_MAX);
+    return out;
+}

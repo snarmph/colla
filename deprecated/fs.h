@@ -9,16 +9,16 @@ extern "C" {
 
 #include "file.h"
 
-enum {
+typedef enum {
     FS_MODE_FILE,
     FS_MODE_DIR,
     FS_MODE_CHARACTER_DEVICE,
     FS_MODE_FIFO,
     FS_MODE_UKNOWN,
-};
+} fsmode_t;
 
 typedef struct {
-    int type;
+    fsmode_t type;
     uint64_t size;
     int64_t last_access;
     int64_t last_modif;

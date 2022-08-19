@@ -12,7 +12,7 @@
 
 #include <sys/stat.h>
 
-static int _modeToType(unsigned int mode) {
+static fsmode_t _modeToType(unsigned int mode) {
     switch(mode & _S_IFMT) {
         case _S_IFDIR:  return FS_MODE_DIR;
         case _S_IFCHR:  return FS_MODE_CHARACTER_DEVICE;
@@ -79,7 +79,7 @@ bool fsIsDir(const char *path) {
 #else
 #include <sys/stat.h>
 
-static int _modeToType(unsigned int mode) {
+static fsmode_t _modeToType(unsigned int mode) {
     switch(mode & __S_IFMT) {
         case __S_IFDIR:  return FS_MODE_DIR;
         case __S_IFCHR:  return FS_MODE_CHARACTER_DEVICE;
@@ -90,13 +90,13 @@ static int _modeToType(unsigned int mode) {
 }
 
 fs_stat_t fsStat(file_t fp) {
-    int fd = fileno((FILE*)fp.handle);
+    int fd = fileno((FILE*)fp);
     struct stat statbuf;
     int res = fstat(fd, &statbuf);
     if(res == 0) {
         return (fs_stat_t) {
             .type = _modeToType(statbuf.st_mode),
-            .size = statbuf.st_size,
+            .size = (uint64_t)statbuf.st_size,
             .last_access = statbuf.st_atime,
             .last_modif = statbuf.st_mtime
         };

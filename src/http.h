@@ -4,23 +4,23 @@
 extern "C" {
 #endif
 
-#include <stdint.h>
 #include <stddef.h>
 #include <stdbool.h>
 
+#include "collatypes.h"
 #include "str.h"
 #include "strstream.h"
 #include "socket.h"
 
-enum {
+typedef enum {
     REQ_GET,   
     REQ_POST,    
     REQ_HEAD,    
     REQ_PUT,    
     REQ_DELETE  
-};
+} reqtype_t;
 
-enum {
+typedef enum {
     // 2xx: success
     STATUS_OK              = 200,
     STATUS_CREATED         = 201,
@@ -49,11 +49,11 @@ enum {
     STATUS_SERVICE_NOT_AVAILABLE = 503,
     STATUS_GATEWAY_TIMEOUT       = 504,
     STATUS_VERSION_NOT_SUPPORTED = 505,
-};
+} resstatus_t;
 
 typedef struct {
-    uint8_t major;
-    uint8_t minor;
+    uint8 major;
+    uint8 minor;
 } http_version_t;
 
 // translates a http_version_t to a single readable number (e.g. 1.1 -> 11, 1.0 -> 10, etc)
@@ -64,18 +64,14 @@ typedef struct {
     char *value;
 } http_field_t;
 
-#define T http_field_t
-#define VEC_SHORT_NAME field_vec
-#define VEC_DISABLE_ERASE_WHEN
-#define VEC_NO_IMPLEMENTATION
 #include "vec.h"
 
 // == HTTP REQUEST ============================================================
 
 typedef struct {
-    int method;
+    reqtype_t method;
     http_version_t version;
-    field_vec_t fields;
+    vec(http_field_t) fields;
     char *uri;
     char *body;
 } http_request_t;
@@ -86,7 +82,7 @@ void reqFree(http_request_t *ctx);
 bool reqHasField(http_request_t *ctx, const char *key);
 
 void reqSetField(http_request_t *ctx, const char *key, const char *value);
-void reqSetUri(http_request_t *ctx, const char *uri);
+void reqSetUri(http_request_t *ctx, strview_t uri);
 
 str_ostream_t reqPrepare(http_request_t *ctx);
 str_t reqString(http_request_t *ctx);
@@ -94,10 +90,10 @@ str_t reqString(http_request_t *ctx);
 // == HTTP RESPONSE ===========================================================
 
 typedef struct {
-    int status_code;
-    field_vec_t fields;
+    resstatus_t status_code;
+    vec(http_field_t) fields;
     http_version_t version;
-    str_t body;
+    vec(uint8) body;
 } http_response_t;
 
 http_response_t resInit(void);
@@ -113,19 +109,28 @@ void resParseFields(http_response_t *ctx, str_istream_t *in);
 
 typedef struct {
     str_t host_name;
-    uint16_t port;
+    uint16 port;
     socket_t socket;
 } http_client_t;
 
 http_client_t hcliInit(void);
 void hcliFree(http_client_t *ctx);
 
-void hcliSetHost(http_client_t *ctx, const char *hostname);
+void hcliSetHost(http_client_t *ctx, strview_t hostname);
 http_response_t hcliSendRequest(http_client_t *ctx, http_request_t *request);
 
 // == HTTP ====================================================================
 
-http_response_t httpGet(const char *hostname, const char *uri);
+http_response_t httpGet(strview_t hostname, strview_t uri);
+
+// == URL =====================================================================
+
+typedef struct {
+    strview_t host;
+    strview_t uri;
+} url_split_t;
+
+url_split_t urlSplit(strview_t uri);
 
 #ifdef __cplusplus
 } // extern "C"

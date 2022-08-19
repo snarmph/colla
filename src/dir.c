@@ -55,8 +55,8 @@ dir_t dirOpen(const char *path) {
     str_ostream_t out = ostrInitLen(n + 3);
     n = GetFullPathName(path, n, out.buf, NULL);
     assert(n > 0);
-    out.size += n;
-    switch(ostrBack(&out)) {
+    out.len += n;
+    switch(ostrBack(out)) {
     case '\\':
     case '/':
     case ':':
@@ -70,12 +70,12 @@ dir_t dirOpen(const char *path) {
 
     _dir_internal_t *dir = malloc(sizeof(_dir_internal_t));
     if(dir) {
-        wchar_t *wpath = strToWCHAR(ostrAsStr(&out));
+        wchar_t *wpath = strToWCHAR(ostrAsStr(out));
         assert(wpath);
         *dir = _getFirst(wpath);
         free(wpath);
     }
-    ostrFree(&out);
+    ostrFree(out);
 
     return dir;
 }
@@ -91,17 +91,23 @@ bool dirValid(dir_t ctx) {
 
 dir_entry_t *dirNext(dir_t ctx) {
     _dir_internal_t *dir = (_dir_internal_t*)ctx;
-    strFree(&dir->cur.name);
+    strFree(dir->cur.name);
     if(!dir->handle) return NULL;
     dir->cur = dir->next;
     _getNext(dir);
     return &dir->cur;
 }
 
+void dirCreate(const char *path) {
+    CreateDirectoryA(path, NULL);
+}
+
 #else
 
 #include <dirent.h>
 #include <stdlib.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 
 // taken from https://sites.uclouvain.be/SystInfo/usr/include/dirent.h.html
 // hopefully shouldn't be needed
@@ -118,7 +124,7 @@ typedef struct {
 } _dir_internal_t;
 
 dir_t dirOpen(const char *path) {
-    _dir_internal_t *ctx = calloc(1, sizeof(_dir_internal_t));
+    _dir_internal_t *ctx = (_dir_internal_t *)calloc(1, sizeof(_dir_internal_t));
     if(ctx) ctx->dir = opendir(path);
     return ctx;
 }
@@ -139,7 +145,7 @@ bool dirValid(dir_t ctx) {
 dir_entry_t *dirNext(dir_t ctx) {
     if(!ctx) return NULL;
     _dir_internal_t *in = (_dir_internal_t *)ctx;
-    strFree(&in->next.name);
+    strFree(in->next.name);
     struct dirent *dp = readdir(in->dir);
     if(!dp) return NULL;
     
@@ -149,8 +155,12 @@ dir_entry_t *dirNext(dir_t ctx) {
     default: in->next.type = FS_TYPE_UNKNOWN; break;
     }
 
-    in->next.name = strInitStr(dp->d_name);
+    in->next.name = strFromStr(dp->d_name);
     return &in->next;
+}
+
+void dirCreate(const char *path) {
+    mkdir(path, 0700);
 }
 
 #endif

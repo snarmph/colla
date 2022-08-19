@@ -48,7 +48,7 @@ bool skCleanup() {
     return SOCK_CALL(skCleanup());
 }
 
-socket_t skOpen(skType type) {
+socket_t skOpen(sktype_t type) {
     int sock_type = 0;
 
     switch(type) {

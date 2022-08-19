@@ -5,6 +5,7 @@
 #include <limits.h>
 #include <stdarg.h>
 #include <stdio.h>
+#include <ctype.h>
 #include <math.h> // HUGE_VALF
 #include "tracelog.h"
 
@@ -14,7 +15,7 @@ str_istream_t istrInit(const char *str) {
     return istrInitLen(str, strlen(str));
 }
 
-str_istream_t istrInitLen(const char *str, size_t len) {
+str_istream_t istrInitLen(const char *str, usize len) {
     str_istream_t res;
     res.start = res.cur = str;
     res.size = len;
@@ -26,8 +27,8 @@ char istrGet(str_istream_t *ctx) {
 }
 
 void istrIgnore(str_istream_t *ctx, char delim) {
-    size_t position = ctx->cur - ctx->start;
-    size_t i;
+    usize position = ctx->cur - ctx->start;
+    usize i;
     for(i = position; 
         i < ctx->size && *ctx->cur != delim; 
         ++i, ++ctx->cur);
@@ -37,8 +38,8 @@ char istrPeek(str_istream_t *ctx) {
     return *ctx->cur;
 }
 
-void istrSkip(str_istream_t *ctx, size_t n) {
-    size_t remaining = ctx->size - (ctx->cur - ctx->start);
+void istrSkip(str_istream_t *ctx, usize n) {
+    usize remaining = ctx->size - (ctx->cur - ctx->start);
     if(n > remaining) {
         warn("skipping more then remaining: %zu -> %zu", n, remaining);
         return;
@@ -46,8 +47,14 @@ void istrSkip(str_istream_t *ctx, size_t n) {
     ctx->cur += n;
 }
 
-void istrRead(str_istream_t *ctx, char *buf, size_t len) {
-    size_t remaining = ctx->size - (ctx->cur - ctx->start);
+void istrSkipWhitespace(str_istream_t *ctx) {
+    while (*ctx->cur && isspace(*ctx->cur)) {
+        ++ctx->cur;
+    }
+}
+
+void istrRead(str_istream_t *ctx, char *buf, usize len) {
+    usize remaining = ctx->size - (ctx->cur - ctx->start);
     if(len > remaining) {
         warn("istrRead: trying to read len %zu from remaining %zu", len, remaining);
         return;
@@ -56,8 +63,8 @@ void istrRead(str_istream_t *ctx, char *buf, size_t len) {
     ctx->cur += len;
 }
 
-size_t istrReadMax(str_istream_t *ctx, char *buf, size_t len) {
-    size_t remaining = ctx->size - (ctx->cur - ctx->start);
+usize istrReadMax(str_istream_t *ctx, char *buf, usize len) {
+    usize remaining = ctx->size - (ctx->cur - ctx->start);
     len = remaining < len ? remaining : len;
     memcpy(buf, ctx->cur, len);
     ctx->cur += len;
@@ -68,16 +75,20 @@ void istrRewind(str_istream_t *ctx) {
     ctx->cur = ctx->start;
 }
 
-size_t istrTell(str_istream_t *ctx) {
-    return ctx->cur - ctx->start;
+usize istrTell(str_istream_t ctx) {
+    return ctx.cur - ctx.start;
 }
 
-bool istrIsFinished(str_istream_t *ctx) {
-    return ctx->cur == (ctx->start + ctx->size + 1);
+usize istrRemaining(str_istream_t ctx) {
+    return ctx.size - (ctx.cur - ctx.start);
+}
+
+bool istrIsFinished(str_istream_t ctx) {
+    return (usize)(ctx.cur - ctx.start) >= ctx.size;
 }
 
 bool istrGetbool(str_istream_t *ctx, bool *val) {
-    size_t remaining = ctx->size - (ctx->cur - ctx->start);
+    usize remaining = ctx->size - (ctx->cur - ctx->start);
     if(strncmp(ctx->cur, "true", remaining) == 0) {
         *val = true;
         return true;
@@ -89,9 +100,9 @@ bool istrGetbool(str_istream_t *ctx, bool *val) {
     return false;
 }
 
-bool istrGetu8(str_istream_t *ctx, uint8_t *val) {
+bool istrGetu8(str_istream_t *ctx, uint8 *val) {
     char *end = NULL;
-    *val = (uint8_t) strtoul(ctx->cur, &end, 0);
+    *val = (uint8) strtoul(ctx->cur, &end, 0);
     
     if(ctx->cur == end) {
         warn("istrGetu8: no valid conversion could be performed");
@@ -106,9 +117,9 @@ bool istrGetu8(str_istream_t *ctx, uint8_t *val) {
     return true;
 }
 
-bool istrGetu16(str_istream_t *ctx, uint16_t *val) {
+bool istrGetu16(str_istream_t *ctx, uint16 *val) {
     char *end = NULL;
-    *val = (uint16_t) strtoul(ctx->cur, &end, 0);
+    *val = (uint16) strtoul(ctx->cur, &end, 0);
     
     if(ctx->cur == end) {
         warn("istrGetu16: no valid conversion could be performed");
@@ -123,9 +134,9 @@ bool istrGetu16(str_istream_t *ctx, uint16_t *val) {
     return true;
 }
 
-bool istrGetu32(str_istream_t *ctx, uint32_t *val) {
+bool istrGetu32(str_istream_t *ctx, uint32 *val) {
     char *end = NULL;
-    *val = (uint32_t) strtoul(ctx->cur, &end, 0);
+    *val = (uint32) strtoul(ctx->cur, &end, 0);
     
     if(ctx->cur == end) {
         warn("istrGetu32: no valid conversion could be performed");
@@ -140,7 +151,7 @@ bool istrGetu32(str_istream_t *ctx, uint32_t *val) {
     return true;
 }
 
-bool istrGetu64(str_istream_t *ctx, uint64_t *val) {
+bool istrGetu64(str_istream_t *ctx, uint64 *val) {
     char *end = NULL;
     *val = strtoull(ctx->cur, &end, 0);
     
@@ -157,9 +168,9 @@ bool istrGetu64(str_istream_t *ctx, uint64_t *val) {
     return true;
 }
 
-bool istrGeti8(str_istream_t *ctx, int8_t *val) {
+bool istrGeti8(str_istream_t *ctx, int8 *val) {
     char *end = NULL;
-    *val = (int8_t) strtol(ctx->cur, &end, 0);
+    *val = (int8) strtol(ctx->cur, &end, 0);
     
     if(ctx->cur == end) {
         warn("istrGeti8: no valid conversion could be performed");
@@ -174,9 +185,9 @@ bool istrGeti8(str_istream_t *ctx, int8_t *val) {
     return true;
 }
 
-bool istrGeti16(str_istream_t *ctx, int16_t *val) {
+bool istrGeti16(str_istream_t *ctx, int16 *val) {
     char *end = NULL;
-    *val = (int16_t) strtol(ctx->cur, &end, 0);
+    *val = (int16) strtol(ctx->cur, &end, 0);
     
     if(ctx->cur == end) {
         warn("istrGeti16: no valid conversion could be performed");
@@ -191,9 +202,9 @@ bool istrGeti16(str_istream_t *ctx, int16_t *val) {
     return true;
 }
 
-bool istrGeti32(str_istream_t *ctx, int32_t *val) {
+bool istrGeti32(str_istream_t *ctx, int32 *val) {
     char *end = NULL;
-    *val = (int32_t) strtol(ctx->cur, &end, 0);
+    *val = (int32) strtol(ctx->cur, &end, 0);
     
     if(ctx->cur == end) {
         warn("istrGeti32: no valid conversion could be performed");
@@ -208,7 +219,7 @@ bool istrGeti32(str_istream_t *ctx, int32_t *val) {
     return true;
 }
 
-bool istrGeti64(str_istream_t *ctx, int64_t *val) {
+bool istrGeti64(str_istream_t *ctx, int64 *val) {
     char *end = NULL;
     *val = strtoll(ctx->cur, &end, 0);
     
@@ -259,7 +270,7 @@ bool istrGetdouble(str_istream_t *ctx, double *val) {
     return true;
 }
 
-size_t istrGetstring(str_istream_t *ctx, char **val, char delim) {
+usize istrGetstring(str_istream_t *ctx, char **val, char delim) {
     const char *from = ctx->cur;
     istrIgnore(ctx, delim);
     // if it didn't actually find it, it just reached the end of the string
@@ -267,15 +278,15 @@ size_t istrGetstring(str_istream_t *ctx, char **val, char delim) {
         *val = NULL;
         return 0;
     }
-    size_t len = ctx->cur - from;
-    *val = malloc(len + 1);
+    usize len = ctx->cur - from;
+    *val = (char *)malloc(len + 1);
     memcpy(*val, from, len);
     (*val)[len] = '\0';
     return len;
 }
 
-size_t istrGetstringBuf(str_istream_t *ctx, char *val, size_t len) {
-    size_t remaining = ctx->size - (ctx->cur - ctx->start);
+usize istrGetstringBuf(str_istream_t *ctx, char *val, usize len) {
+    usize remaining = ctx->size - (ctx->cur - ctx->start);
     len -= 1;
     len = remaining < len ? remaining : len;
     memcpy(val, ctx->cur, len);
@@ -287,86 +298,74 @@ size_t istrGetstringBuf(str_istream_t *ctx, char *val, size_t len) {
 strview_t istrGetview(str_istream_t *ctx, char delim) {
     const char *from = ctx->cur;
     istrIgnore(ctx, delim);
-    // if it didn't actually find it, it just reached the end of the string
-    if(*ctx->cur != delim) {
-        return strvInitLen(NULL, 0);
-    }
-    size_t len = ctx->cur - from;
+    usize len = ctx->cur - from;
     return strvInitLen(from, len);
 }
 
-strview_t istrGetviewLen(str_istream_t *ctx, size_t off, size_t len) {
-    size_t remaining = ctx->size - (ctx->cur - ctx->start) - off;
-    if(len > remaining) len = remaining;
-    return strvInitLen(ctx->cur + off, len);
+strview_t istrGetviewLen(str_istream_t *ctx, usize from, usize to) {
+    usize len = ctx->size - (ctx->cur - ctx->start) - from;
+    if (to > len) to = len;
+    if (from > to) from = to;
+    return strvInitLen(ctx->cur + from, to - from);
 }
 
 /* == OUTPUT STREAM =========================================== */
 
-static void _ostrRealloc(str_ostream_t *ctx, size_t needed) {
-    ctx->allocated = (ctx->allocated * 2) + needed;
-    ctx->buf = realloc(ctx->buf, ctx->allocated);
+static void _ostrRealloc(str_ostream_t *ctx, usize needed) {
+    ctx->cap = (ctx->cap * 2) + needed;
+    ctx->buf = (char *)realloc(ctx->buf, ctx->cap);
 }
 
 str_ostream_t ostrInit() {
     return ostrInitLen(1);
 }
 
-str_ostream_t ostrInitLen(size_t initial_alloc) {
+str_ostream_t ostrInitLen(usize initial_alloc) {
     str_ostream_t stream;
-    stream.buf = calloc(initial_alloc, 1);
-    stream.size = 0;
-    stream.allocated = initial_alloc;
+    stream.buf = (char *)calloc(initial_alloc, 1);
+    stream.len = 0;
+    stream.cap = initial_alloc;
     return stream;
 }
 
-str_ostream_t ostrInitStr(const char *cstr, size_t len) {
+str_ostream_t ostrInitStr(const char *cstr, usize len) {
     str_ostream_t stream;
-    stream.buf = malloc(len + 1);
+    stream.buf = (char *)malloc(len + 1);
     memcpy(stream.buf, cstr, len);
-    stream.size = len;
-    stream.allocated = len + 1;
+    stream.len = len;
+    stream.cap = len + 1;
     return stream;
 }
 
-void ostrFree(str_ostream_t *ctx) {
-    free(ctx->buf);
-    ctx->buf = NULL;
-    ctx->size = 0;
-    ctx->allocated = 0;
+void ostrFree(str_ostream_t ctx) {
+    free(ctx.buf);
 }
 
 void ostrClear(str_ostream_t *ctx) {
-    ctx->size = 0;
+    ctx->len = 0;
 }
 
-str_t ostrMove(str_ostream_t *ctx) {
-    str_t str = ostrAsStr(ctx);
-    *ctx = (str_ostream_t){0};
-    return str;
+char ostrBack(str_ostream_t ctx) {
+    if(ctx.len == 0) return '\0';
+    return ctx.buf[ctx.len - 1];
 }
 
-char ostrBack(str_ostream_t *ctx) {
-    if(ctx->size == 0) return '\0';
-    return ctx->buf[ctx->size - 1];
-}
-
-str_t ostrAsStr(str_ostream_t *ctx) {
+str_t ostrAsStr(str_ostream_t ctx) {
     return (str_t) {
-        .buf = ctx->buf,
-        .len = ctx->size
+        .buf = ctx.buf,
+        .len = ctx.len
     };
 }
 
-strview_t ostrAsView(str_ostream_t *ctx) {
+strview_t ostrAsView(str_ostream_t ctx) {
     return (strview_t) {
-        .buf = ctx->buf,
-        .len = ctx->size
+        .buf = ctx.buf,
+        .len = ctx.len
     };
 }
 
 void ostrReplace(str_ostream_t *ctx, char from, char to) {
-    for(size_t i = 0; i < ctx->size; ++i) {
+    for(usize i = 0; i < ctx->len; ++i) {
         if(ctx->buf[i] == from) {
             ctx->buf[i] = to;
         }
@@ -376,36 +375,45 @@ void ostrReplace(str_ostream_t *ctx, char from, char to) {
 void ostrPrintf(str_ostream_t *ctx, const char *fmt, ...) {
     va_list va;
     va_start(va, fmt);
+    ostrPrintfV(ctx, fmt, va);
+    va_end(va);
+}
 
+void ostrPrintfV(str_ostream_t *ctx, const char *fmt, va_list args) {
+    va_list vtemp;
+    int len;
+    usize remaining;
+    
     // vsnprintf returns the length of the formatted string, even if truncated
     // we use this to get the actual length of the formatted string
-    char buf[1];
-    va_list vtemp;
-    va_copy(vtemp, va);
-    int len = vsnprintf(buf, sizeof(buf), fmt, vtemp);
+    va_copy(vtemp, args);
+    len = vsnprintf(NULL, 0, fmt, vtemp);
     va_end(vtemp);
     if(len < 0) {
         err("couldn't format string \"%s\"", fmt);
         goto error;
     }
 
-    size_t remaining = ctx->allocated - ctx->size;
-    if(remaining < (size_t)len) {
+    remaining = ctx->cap - ctx->len;
+    if(remaining < (usize)len) {
         _ostrRealloc(ctx, len + 1);
-        remaining = ctx->allocated - ctx->size;
+        remaining = ctx->cap - ctx->len;
     }
 
     // actual formatting here
-    len = vsnprintf(ctx->buf + ctx->size, remaining, fmt, va);
+    va_copy(vtemp, args);
+    len = vsnprintf(ctx->buf + ctx->len, remaining, fmt, vtemp);
+    va_end(vtemp);
     if(len < 0) {
         err("couldn't format stringh \"%s\"", fmt);
         goto error;
     }
-    ctx->size += len;
+    ctx->len += len;
 
 error:
-    va_end(va);
+    return;
 }
+
 
 #define APPEND_BUF_LEN 20
 
@@ -413,19 +421,23 @@ void ostrPutc(str_ostream_t *ctx, char c) {
     ostrAppendchar(ctx, c);
 }
 
+void ostrPuts(str_ostream_t *ctx, const char *str) {
+    ostrAppendview(ctx, strvInit(str));
+}
+
 void ostrAppendbool(str_ostream_t *ctx, bool val) {
     ostrAppendview(ctx, strvInit(val ? "true" : "false"));
 }
 
 void ostrAppendchar(str_ostream_t *ctx, char val) {
-    if(ctx->size >= ctx->allocated) {
+    if(ctx->len >= ctx->cap) {
         _ostrRealloc(ctx, 1);
     }
-    ctx->buf[ctx->size++] = val;
-    ctx->buf[ctx->size] = '\0';
+    ctx->buf[ctx->len++] = val;
+    ctx->buf[ctx->len] = '\0';
 }
 
-void ostrAppendu8(str_ostream_t *ctx, uint8_t val) {
+void ostrAppendu8(str_ostream_t *ctx, uint8 val) {
     char buf[APPEND_BUF_LEN];
     int len = snprintf(buf, sizeof(buf), "%hhu", val);
     if(len <= 0) {
@@ -435,7 +447,7 @@ void ostrAppendu8(str_ostream_t *ctx, uint8_t val) {
     ostrAppendview(ctx, strvInitLen(buf, len));
 }
 
-void ostrAppendu16(str_ostream_t *ctx, uint16_t val) {
+void ostrAppendu16(str_ostream_t *ctx, uint16 val) {
     char buf[APPEND_BUF_LEN];
     int len = snprintf(buf, sizeof(buf), "%hu", val);
     if(len <= 0) {
@@ -445,7 +457,7 @@ void ostrAppendu16(str_ostream_t *ctx, uint16_t val) {
     ostrAppendview(ctx, strvInitLen(buf, len));
 }
 
-void ostrAppendu32(str_ostream_t *ctx, uint32_t val) {
+void ostrAppendu32(str_ostream_t *ctx, uint32 val) {
     char buf[APPEND_BUF_LEN];
     int len = snprintf(buf, sizeof(buf), "%u", val);
     if(len <= 0) {
@@ -455,7 +467,7 @@ void ostrAppendu32(str_ostream_t *ctx, uint32_t val) {
     ostrAppendview(ctx, strvInitLen(buf, len));
 }
 
-void ostrAppendu64(str_ostream_t *ctx, uint64_t val) {
+void ostrAppendu64(str_ostream_t *ctx, uint64 val) {
     char buf[APPEND_BUF_LEN];
 #if _WIN32
     int len = snprintf(buf, sizeof(buf), "%llu", val);
@@ -469,7 +481,7 @@ void ostrAppendu64(str_ostream_t *ctx, uint64_t val) {
     ostrAppendview(ctx, strvInitLen(buf, len));
 }
 
-void ostrAppendi8(str_ostream_t *ctx, int8_t val) {
+void ostrAppendi8(str_ostream_t *ctx, int8 val) {
     char buf[APPEND_BUF_LEN];
     int len = snprintf(buf, sizeof(buf), "%hhi", val);
     if(len <= 0) {
@@ -479,7 +491,7 @@ void ostrAppendi8(str_ostream_t *ctx, int8_t val) {
     ostrAppendview(ctx, strvInitLen(buf, len));
 }
 
-void ostrAppendi16(str_ostream_t *ctx, int16_t val) {
+void ostrAppendi16(str_ostream_t *ctx, int16 val) {
     char buf[APPEND_BUF_LEN];
     int len = snprintf(buf, sizeof(buf), "%hi", val);
     if(len <= 0) {
@@ -489,7 +501,7 @@ void ostrAppendi16(str_ostream_t *ctx, int16_t val) {
     ostrAppendview(ctx, strvInitLen(buf, len));
 }
 
-void ostrAppendi32(str_ostream_t *ctx, int32_t val) {
+void ostrAppendi32(str_ostream_t *ctx, int32 val) {
     char buf[APPEND_BUF_LEN];
     int len = snprintf(buf, sizeof(buf), "%i", val);
     if(len <= 0) {
@@ -499,7 +511,7 @@ void ostrAppendi32(str_ostream_t *ctx, int32_t val) {
     ostrAppendview(ctx, strvInitLen(buf, len));
 }
 
-void ostrAppendi64(str_ostream_t *ctx, int64_t val) {
+void ostrAppendi64(str_ostream_t *ctx, int64 val) {
     char buf[APPEND_BUF_LEN];
 #if _WIN32
     int len = snprintf(buf, sizeof(buf), "%lli", val);
@@ -534,10 +546,10 @@ void ostrAppenddouble(str_ostream_t *ctx, double val) {
 }
 
 void ostrAppendview(str_ostream_t *ctx, strview_t view) {
-    if((ctx->allocated - ctx->size) <= view.len) {
+    if((ctx->cap - ctx->len) <= view.len) {
         _ostrRealloc(ctx, view.len + 1);
     }
-    memcpy(ctx->buf + ctx->size, view.buf, view.len);
-    ctx->size += view.len;
-    ctx->buf[ctx->size] = '\0';
+    memcpy(ctx->buf + ctx->len, view.buf, view.len);
+    ctx->len += view.len;
+    ctx->buf[ctx->len] = '\0';
 }

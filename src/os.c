@@ -10,7 +10,7 @@
 #include <lmcons.h>
 
 // modified from netbsd source http://cvsweb.netbsd.org/bsdweb.cgi/pkgsrc/pkgtools/libnbcompat/files/getdelim.c?only_with_tag=MAIN
-ssize_t getdelim(char **buf, size_t *bufsz, int delimiter, FILE *fp) {
+isize getdelim(char **buf, size_t *bufsz, int delimiter, FILE *fp) {
     char *ptr, *eptr;
 
     if(*buf == NULL || *bufsz == 0) {
@@ -20,7 +20,7 @@ ssize_t getdelim(char **buf, size_t *bufsz, int delimiter, FILE *fp) {
         }
     }
 
-    ssize_t result = -1;
+    isize result = -1;
     // usually fgetc locks every read, using windows-specific 
     // _lock_file and _unlock_file will be faster
     _lock_file(fp);
@@ -29,7 +29,7 @@ ssize_t getdelim(char **buf, size_t *bufsz, int delimiter, FILE *fp) {
         int c = _getc_nolock(fp);
         if(c == -1) {
             if(feof(fp)) {
-                ssize_t diff = (ssize_t)(ptr - *buf);
+                isize diff = (isize)(ptr - *buf);
                 if(diff != 0) {
                     *ptr = '\0';
                     result = diff;
@@ -47,7 +47,7 @@ ssize_t getdelim(char **buf, size_t *bufsz, int delimiter, FILE *fp) {
         if((ptr + 2) >= eptr) {
             char *nbuf;
             size_t nbufsz = *bufsz * 2;
-            ssize_t d = ptr - *buf;
+            isize d = ptr - *buf;
             if((nbuf = realloc(*buf, nbufsz)) == NULL) {
                 break;
             }
@@ -63,7 +63,7 @@ ssize_t getdelim(char **buf, size_t *bufsz, int delimiter, FILE *fp) {
 }
 
 // taken from netbsd source http://cvsweb.netbsd.org/bsdweb.cgi/pkgsrc/pkgtools/libnbcompat/files/getline.c?only_with_tag=MAIN
-ssize_t getline(char **line_ptr, size_t *n, FILE *stream) {
+isize getline(char **line_ptr, size_t *n, FILE *stream) {
     return getdelim(line_ptr, n, '\n', stream);
 }
 
@@ -74,7 +74,7 @@ str_t getUserName() {
     if(!res) {
         return strInit();
     }
-    return strInitBuf(buf, sz);
+    return strFromBuf(buf, sz);
 }
 
 #else
@@ -82,14 +82,26 @@ str_t getUserName() {
 #include <unistd.h>
 #include <stdio.h>
 #include <errno.h>
+#include <ctype.h>
+
+int stricmp(const char *a, const char *b) {
+    int result;
+    
+    if (a == b) {
+        return 0;
+    }
+
+    while ((result = tolower(*a) - tolower(*b++)) == 0) {
+        if (*a++ == '\0') {
+            break;
+        }
+    }
+
+    return result;
+}
 
 str_t getUserName() {
-    char buf[255];
-    int res = getlogin_r(buf, sizeof(buf));
-    if(res) {
-        return strInit();
-    }
-    return strInitStr(buf);
+    return strFromStr(getlogin());
 }
 
 #endif

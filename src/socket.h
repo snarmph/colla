@@ -36,7 +36,7 @@ typedef struct sockaddr_in sk_addrin_t;
 typedef enum {
     SOCK_TCP,
     SOCK_UDP,
-} skType;
+} sktype_t;
 
 // == RAW SOCKETS ==========================================
 
@@ -46,7 +46,7 @@ bool skInit(void);
 bool skCleanup(void);
 
 // Opens a socket, check socket_t with skValid
-socket_t skOpen(skType type);
+socket_t skOpen(sktype_t type);
 // Opens a socket using 'protocol', options are 
 // ip, icmp, ggp, tcp, egp, pup, udp, hmp, xns-idp, rdp
 // check socket_t with skValid
