@@ -226,6 +226,8 @@ static vec(uint8) _readWholeInternalVec(file_t ctx) {
         goto failed_free;
     }
 
+    _veclen(contents) = read;
+
 failed:
     return contents;
 failed_free:
