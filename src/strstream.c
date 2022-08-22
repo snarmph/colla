@@ -22,6 +22,17 @@ str_istream_t istrInitLen(const char *str, usize len) {
     return res;
 }
 
+void istrScanf(str_istream_t *ctx, const char *fmt, ...) {
+    va_list va;
+    va_start(va, fmt);
+    istrScanfV(ctx, fmt, va);
+    va_end(va);
+}
+
+void istrScanfV(str_istream_t *ctx, const char *fmt, va_list args) {
+    vsscanf(ctx->cur, fmt, args);
+}
+
 char istrGet(str_istream_t *ctx) {
     return *ctx->cur++;
 }
@@ -32,6 +43,11 @@ void istrIgnore(str_istream_t *ctx, char delim) {
     for(i = position; 
         i < ctx->size && *ctx->cur != delim; 
         ++i, ++ctx->cur);
+}
+
+void istrIgnoreAndSkip(str_istream_t *ctx, char delim) {
+    istrIgnore(ctx, delim);
+    istrSkip(ctx, 1);
 }
 
 char istrPeek(str_istream_t *ctx) {
@@ -73,6 +89,12 @@ usize istrReadMax(str_istream_t *ctx, char *buf, usize len) {
 
 void istrRewind(str_istream_t *ctx) {
     ctx->cur = ctx->start;
+}
+
+void istrRewindN(str_istream_t *ctx, usize amount) {
+    usize remaining = ctx->size - (ctx->cur - ctx->start);
+    if (amount > remaining) amount = remaining;
+    ctx->cur -= amount;
 }
 
 usize istrTell(str_istream_t ctx) {

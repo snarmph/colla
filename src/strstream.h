@@ -23,12 +23,17 @@ typedef struct {
 str_istream_t istrInit(const char *str);
 str_istream_t istrInitLen(const char *str, usize len);
 
+void istrScanf(str_istream_t *ctx, const char *fmt, ...);
+void istrScanfV(str_istream_t *ctx, const char *fmt, va_list args);
+
 // get the current character and advance
 char istrGet(str_istream_t *ctx);
 // get the current character but don't advance
 char istrPeek(str_istream_t *ctx);
 // ignore characters until the delimiter
 void istrIgnore(str_istream_t *ctx, char delim);
+// ignore characters until the delimiter and skip it
+void istrIgnoreAndSkip(str_istream_t *ctx, char delim);
 // skip n characters
 void istrSkip(str_istream_t *ctx, usize n);
 // skips whitespace (' ', '\n', '\t', '\r')
@@ -40,6 +45,8 @@ void istrRead(str_istream_t *ctx, char *buf, usize len);
 usize istrReadMax(str_istream_t *ctx, char *buf, usize len);
 // returns to the beginning of the stream
 void istrRewind(str_istream_t *ctx);
+// returns back <amount> characters
+void istrRewindN(str_istream_t *ctx, usize amount);
 // returns the number of bytes read from beginning of stream
 usize istrTell(str_istream_t ctx);
 // returns the number of bytes left to read in the stream
