@@ -44,6 +44,7 @@ vec(strview_t) iniAsArrayU8(const inivalue_t *value, const char *delim);
 uint64 iniAsUInt(const inivalue_t *value);
 int64 iniAsInt(const inivalue_t *value);
 double iniAsNum(const inivalue_t *value);
+bool iniAsBool(const inivalue_t *value);
 
 // == INI WRITER ========================================================================
 

@@ -146,6 +146,11 @@ double iniAsNum(const inivalue_t *value) {
     return val;
 }
 
+bool iniAsBool(const inivalue_t *value) {
+    if (!value) return false;
+    return strvCompare(value->value, strvInit("true")) == 0;
+}
+
 // == INI WRITER ========================================================================
 
 #include "strstream.h"
