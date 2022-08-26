@@ -372,6 +372,7 @@ vec(strview_t) iniAsArrayU8(const inivalue_t *value, const char *delim);
 uint64 iniAsUInt(const inivalue_t *value);
 int64 iniAsInt(const inivalue_t *value);
 double iniAsNum(const inivalue_t *value);
+bool iniAsBool(const inivalue_t *value);
 
 // == INI WRITER ========================================================================
 
@@ -444,6 +445,8 @@ char istrGet(str_istream_t *ctx);
 char istrPeek(str_istream_t *ctx);
 // ignore characters until the delimiter
 void istrIgnore(str_istream_t *ctx, char delim);
+// ignore characters until the delimiter and skip it
+void istrIgnoreAndSkip(str_istream_t *ctx, char delim);
 // skip n characters
 void istrSkip(str_istream_t *ctx, usize n);
 // skips whitespace (' ', '\n', '\t', '\r')
@@ -455,6 +458,8 @@ void istrRead(str_istream_t *ctx, char *buf, usize len);
 usize istrReadMax(str_istream_t *ctx, char *buf, usize len);
 // returns to the beginning of the stream
 void istrRewind(str_istream_t *ctx);
+// returns back <amount> characters
+void istrRewindN(str_istream_t *ctx, usize amount);
 // returns the number of bytes read from beginning of stream
 usize istrTell(str_istream_t ctx);
 // returns the number of bytes left to read in the stream
@@ -539,37 +544,6 @@ void ostrAppendview(str_ostream_t *ctx, strview_t view);
 #include <windows.h>
 
 #endif // _WIN32 
-
-#pragma once
-
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-#include <stddef.h>
-#include <string.h>
-/* #include "str.h" */
-/* #include "collatypes.h" */
-
-#ifdef _WIN32
-    #include <stdio.h>
-    /* #include "win32_slim.h" */
-    isize getdelim(char **buf, size_t *bufsz, int delimiter, FILE *fp);
-    isize getline(char **line_ptr, size_t *n, FILE *stream);
-    #define stricmp _stricmp
-#else
-    #ifndef _GNU_SOURCE
-        #define _GNU_SOURCE
-    #endif
-    #include <stdio.h>
-    int stricmp(const char *a, const char *b);
-#endif
-
-str_t getUserName();
-
-#ifdef __cplusplus
-} // extern "C"
-#endif
 
 #pragma once
 
@@ -1128,6 +1102,12 @@ void traceUseNewline(bool newline) {
 #include <math.h> // HUGE_VALF
 /* #include "tracelog.h" */
 
+#if defined(_WIN32) && defined(__TINYC__)
+#define strtoull _strtoui64
+#define strtoll _strtoi64
+#define strtof strtod
+#endif
+
 /* == INPUT STREAM ============================================ */
 
 str_istream_t istrInit(const char *str) {
@@ -1151,6 +1131,11 @@ void istrIgnore(str_istream_t *ctx, char delim) {
     for(i = position; 
         i < ctx->size && *ctx->cur != delim; 
         ++i, ++ctx->cur);
+}
+
+void istrIgnoreAndSkip(str_istream_t *ctx, char delim) {
+    istrIgnore(ctx, delim);
+    istrSkip(ctx, 1);
 }
 
 char istrPeek(str_istream_t *ctx) {
@@ -1194,6 +1179,12 @@ void istrRewind(str_istream_t *ctx) {
     ctx->cur = ctx->start;
 }
 
+void istrRewindN(str_istream_t *ctx, usize amount) {
+    usize remaining = ctx->size - (ctx->cur - ctx->start);
+    if (amount > remaining) amount = remaining;
+    ctx->cur -= amount;
+}
+
 usize istrTell(str_istream_t ctx) {
     return ctx.cur - ctx.start;
 }
@@ -1203,7 +1194,7 @@ usize istrRemaining(str_istream_t ctx) {
 }
 
 bool istrIsFinished(str_istream_t ctx) {
-    return (ctx.cur - ctx.start) >= ctx.size;
+    return (usize)(ctx.cur - ctx.start) >= ctx.size;
 }
 
 bool istrGetbool(str_istream_t *ctx, bool *val) {
@@ -2305,6 +2296,8 @@ void strTest(void) {
 
 /* #include "hashmap.h" */
 
+#include <string.h>
+
 static uint64 hash_seed = 0;
 
 hashmap_t hmInit(usize initial_cap) {
@@ -2584,7 +2577,7 @@ usize utf8Encode(char *str, rune codepoint) {
         codepoint >>= 6;
     }
 
-    str[0] = codepoint | first;
+    str[0] = (char)(codepoint | first);
     return len;
 }
 
@@ -2608,6 +2601,8 @@ usize utf8CpSize(rune ch) {
 /* #include "ini.h" */
 
 /* #include "strstream.h" */
+/* #include "file.h" */
+/* #include "tracelog.h" */
 
 // == INI READER ========================================================================
 
@@ -2691,7 +2686,7 @@ vec(strview_t) iniAsArray(const inivalue_t *value, char delim) {
             start = i + 1;
         }
     }
-    strview_t last = strvTrim(strvSub(v, start, -1));
+    strview_t last = strvTrim(strvSub(v, start, SIZE_MAX));
     if (!strvIsEmpty(last)) vecAppend(out, last);
     return out;
 }
@@ -2722,7 +2717,7 @@ vec(strview_t) iniAsArrayU8(const inivalue_t *value, const char *delim) {
         prevbuf = buf;
     }
 
-    strview_t last = strvTrim(strvSub(v, start - v.buf, -1));
+    strview_t last = strvTrim(strvSub(v, start - v.buf, SIZE_MAX));
     if (!strvIsEmpty(last)) vecAppend(out, last);
     return out;
 }
@@ -2749,6 +2744,11 @@ double iniAsNum(const inivalue_t *value) {
     double val = 0;
     if (!istrGetdouble(&in, &val)) val = 0;
     return val;
+}
+
+bool iniAsBool(const inivalue_t *value) {
+    if (!value) return false;
+    return strvCompare(value->value, strvInit("true")) == 0;
 }
 
 // == INI WRITER ========================================================================
@@ -2926,114 +2926,6 @@ static void addValue(initable_t *table, str_istream_t *in, const iniopts_t *opti
         new_value->value = value;
     }
 }
-
-/* #include "os.h" */
-
-#include <string.h>
-#include <stdlib.h>
-#include <ctype.h>
-
-#ifdef _WIN32
-#define _BUFSZ 128
-
-#include <lmcons.h>
-
-// modified from netbsd source http://cvsweb.netbsd.org/bsdweb.cgi/pkgsrc/pkgtools/libnbcompat/files/getdelim.c?only_with_tag=MAIN
-isize getdelim(char **buf, size_t *bufsz, int delimiter, FILE *fp) {
-    char *ptr, *eptr;
-
-    if(*buf == NULL || *bufsz == 0) {
-        *bufsz = _BUFSZ;
-        if((*buf = malloc(*bufsz)) == NULL) {
-            return -1;
-        }
-    }
-
-    isize result = -1;
-    // usually fgetc locks every read, using windows-specific 
-    // _lock_file and _unlock_file will be faster
-    _lock_file(fp);
-
-    for(ptr = *buf, eptr = *buf + *bufsz;;) {
-        int c = _getc_nolock(fp);
-        if(c == -1) {
-            if(feof(fp)) {
-                isize diff = (isize)(ptr - *buf);
-                if(diff != 0) {
-                    *ptr = '\0';
-                    result = diff;
-                    break;
-                }
-            }
-            break;
-        }
-        *ptr++ = (char)c;
-        if(c == delimiter) {
-            *ptr = '\0';
-            result = ptr - *buf;
-            break;
-        }
-        if((ptr + 2) >= eptr) {
-            char *nbuf;
-            size_t nbufsz = *bufsz * 2;
-            isize d = ptr - *buf;
-            if((nbuf = realloc(*buf, nbufsz)) == NULL) {
-                break;
-            }
-            *buf = nbuf;
-            *bufsz = nbufsz;
-            eptr = nbuf + nbufsz;
-            ptr = nbuf + d;
-        }
-    }
-
-    _unlock_file(fp);
-    return result;
-}
-
-// taken from netbsd source http://cvsweb.netbsd.org/bsdweb.cgi/pkgsrc/pkgtools/libnbcompat/files/getline.c?only_with_tag=MAIN
-isize getline(char **line_ptr, size_t *n, FILE *stream) {
-    return getdelim(line_ptr, n, '\n', stream);
-}
-
-str_t getUserName() {    
-    char buf[UNLEN + 1];
-    DWORD sz = sizeof(buf);
-    BOOL res = GetUserNameA(buf, &sz);
-    if(!res) {
-        return strInit();
-    }
-    return strFromBuf(buf, sz);
-}
-
-#else
-
-#include <unistd.h>
-#include <stdio.h>
-#include <errno.h>
-#include <ctype.h>
-
-int stricmp(const char *a, const char *b) {
-    int result;
-    
-    if (a == b) {
-        return 0;
-    }
-
-    while ((result = tolower(*a) - tolower(*b++)) == 0) {
-        if (*a++ == '\0') {
-            break;
-        }
-    }
-
-    return result;
-}
-
-str_t getUserName() {
-    return strFromStr(getlogin());
-}
-
-#endif
 
 /* #include "file.h" */
 
@@ -3262,6 +3154,8 @@ static vec(uint8) _readWholeInternalVec(file_t ctx) {
         err("file: read wrong amount of bytes: %zu instead of %zu", read, fsize);
         goto failed_free;
     }
+
+    _veclen(contents) = read;
 
 failed:
     return contents;
@@ -4202,7 +4096,7 @@ url_split_t urlSplit(strview_t uri) {
     }
 
     out.host = strvSub(uri, 0, strvFind(uri, '/', 0));
-    out.uri = strvSub(uri, out.host.len, -1);
+    out.uri = strvSub(uri, out.host.len, SIZE_MAX);
     return out;
 }
 
