@@ -9,6 +9,13 @@
 
 #include "vec.h"
 
+#ifdef _WIN32
+    #define stricmp _stricmp
+#else
+    #include <strings.h> // strcasecmp
+    #define stricmp strcasecmp
+#endif
+
 // == INTERNAL ================================================================
 
 static void _setField(vec(http_field_t) *fields_vec, const char *key, const char *value) {
