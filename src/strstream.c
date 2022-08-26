@@ -9,6 +9,12 @@
 #include <math.h> // HUGE_VALF
 #include "tracelog.h"
 
+#if defined(_WIN32) && defined(__TINYC__)
+#define strtoull _strtoui64
+#define strtoll _strtoi64
+#define strtof strtod
+#endif
+
 /* == INPUT STREAM ============================================ */
 
 str_istream_t istrInit(const char *str) {
@@ -20,17 +26,6 @@ str_istream_t istrInitLen(const char *str, usize len) {
     res.start = res.cur = str;
     res.size = len;
     return res;
-}
-
-void istrScanf(str_istream_t *ctx, const char *fmt, ...) {
-    va_list va;
-    va_start(va, fmt);
-    istrScanfV(ctx, fmt, va);
-    va_end(va);
-}
-
-void istrScanfV(str_istream_t *ctx, const char *fmt, va_list args) {
-    vsscanf(ctx->cur, fmt, args);
 }
 
 char istrGet(str_istream_t *ctx) {

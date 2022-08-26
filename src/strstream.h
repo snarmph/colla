@@ -23,9 +23,6 @@ typedef struct {
 str_istream_t istrInit(const char *str);
 str_istream_t istrInitLen(const char *str, usize len);
 
-void istrScanf(str_istream_t *ctx, const char *fmt, ...);
-void istrScanfV(str_istream_t *ctx, const char *fmt, va_list args);
-
 // get the current character and advance
 char istrGet(str_istream_t *ctx);
 // get the current character but don't advance
