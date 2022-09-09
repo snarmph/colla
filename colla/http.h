@@ -51,6 +51,8 @@ typedef enum {
     STATUS_VERSION_NOT_SUPPORTED = 505,
 } resstatus_t;
 
+const char *httpGetStatusString(resstatus_t status);
+
 typedef struct {
     uint8 major;
     uint8 minor;
@@ -77,7 +79,8 @@ typedef struct {
 } http_request_t;
 
 http_request_t reqInit(void);
-void reqFree(http_request_t *ctx);
+http_request_t reqParse(const char *request);
+void reqFree(http_request_t ctx);
 
 bool reqHasField(http_request_t *ctx, const char *key);
 
@@ -96,14 +99,17 @@ typedef struct {
     vec(uint8) body;
 } http_response_t;
 
-http_response_t resInit(void);
-void resFree(http_response_t *ctx);
+http_response_t resParse(const char *data);
+void resFree(http_response_t ctx);
 
 bool resHasField(http_response_t *ctx, const char *key);
+void resSetField(http_response_t *ctx, const char *key, const char *value);
 const char *resGetField(http_response_t *ctx, const char *field);
 
-void resParse(http_response_t *ctx, const char *data);
+// void resParse(http_response_t *ctx, const char *data);
 void resParseFields(http_response_t *ctx, str_istream_t *in);
+str_ostream_t resPrepare(http_response_t *ctx);
+str_t resString(http_response_t *ctx);
 
 // == HTTP CLIENT =============================================================
 
@@ -114,7 +120,7 @@ typedef struct {
 } http_client_t;
 
 http_client_t hcliInit(void);
-void hcliFree(http_client_t *ctx);
+void hcliFree(http_client_t ctx);
 
 void hcliSetHost(http_client_t *ctx, strview_t hostname);
 http_response_t hcliSendRequest(http_client_t *ctx, http_request_t *request);

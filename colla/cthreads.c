@@ -75,8 +75,9 @@ cmutex_t mtxInit(void) {
     return (cmutex_t)crit_sec;
 }
 
-void mtxDestroy(cmutex_t ctx) {
+void mtxFree(cmutex_t ctx) {
     DeleteCriticalSection((CRITICAL_SECTION *)ctx);
+    free((CRITICAL_SECTION *)ctx);
 }
 
 bool mtxValid(cmutex_t ctx) {
@@ -97,6 +98,35 @@ bool mtxUnlock(cmutex_t ctx) {
     return true;
 }
 
+// == CONDITION VARIABLE ===============================
+
+#include <tracelog.h>
+
+condvar_t condInit(void) {
+    CONDITION_VARIABLE *cond = malloc(sizeof(CONDITION_VARIABLE));
+    InitializeConditionVariable(cond);
+    return (condvar_t)cond;
+}
+
+void condFree(condvar_t cond) {
+    free((CONDITION_VARIABLE *)cond);
+}
+
+void condWake(condvar_t cond) {
+    WakeConditionVariable((CONDITION_VARIABLE *)cond);
+}
+
+void condWakeAll(condvar_t cond) {
+    WakeAllConditionVariable((CONDITION_VARIABLE *)cond);
+}
+
+void condWait(condvar_t cond, cmutex_t mtx) {
+    BOOL res = SleepConditionVariableCS((CONDITION_VARIABLE *)cond, (CRITICAL_SECTION *)mtx, INFINITE);
+}
+
+void condWaitTimed(condvar_t cond, cmutex_t mtx, int milliseconds) {
+    SleepConditionVariableCS((CONDITION_VARIABLE *)cond, (CRITICAL_SECTION *)mtx, milliseconds);
+}
 
 #else
 #include <pthread.h>
@@ -168,14 +198,16 @@ cmutex_t mtxInit(void) {
     pthread_mutex_t *mutex = malloc(sizeof(pthread_mutex_t));
 
     if(mutex) {
-        int res = pthread_mutex_init(mutex, NULL);
-        if(res != 0) mutex = NULL;
+        if(pthread_mutex_init(mutex, NULL)) {
+            free(mutex);
+            mutex = NULL;
+        }
     }
 
     return (cmutex_t)mutex;
 }
 
-void mtxDestroy(cmutex_t ctx) {
+void mtxFree(cmutex_t ctx) {
     pthread_mutex_destroy((pthread_mutex_t *)ctx);
 }
 
@@ -193,6 +225,46 @@ bool mtxTryLock(cmutex_t ctx) {
 
 bool mtxUnlock(cmutex_t ctx) {
     return pthread_mutex_unlock((pthread_mutex_t *)ctx) == 0;
+}
+
+// == CONDITION VARIABLE ===============================
+
+condvar_t condInit(void) {
+    pthread_cond_t *cond = malloc(sizeof(pthread_cond_t));
+
+    if(cond) {
+        if(pthread_cond_init(cond, NULL)) {
+            free(cond);
+            cond = NULL;
+        }
+    }
+
+    return (condvar_t)cond;
+}
+
+void condFree(condvar_t cond) {
+    if (!cond) return;
+    pthread_cond_destroy((pthread_cond_t *)cond);
+    free((pthread_cond_t *)cond);
+}
+
+void condWake(condvar_t cond) {
+    pthread_cond_signal((pthread_cond_t *)cond);
+}
+
+void condWakeAll(condvar_t cond) {
+    pthread_cond_broadcast((pthread_cond_t *)cond);
+}
+
+void condWait(condvar_t cond, cmutex_t mtx) {
+    pthread_cond_wait((pthread_cond_t *)cond, (pthread_mutex_t *)mtx);
+}
+
+void condWaitTimed(condvar_t cond, cmutex_t mtx, int milliseconds) {
+    struct timespec timeout;
+    time(&timeout.tv_sec);
+    timeout.tv_nsec += milliseconds * 1000000;
+    pthread_cond_timedwait((pthread_cond_t *)cond, (pthread_mutex_t *)mtx, &timeout);
 }
 
 #endif

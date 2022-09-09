@@ -6,10 +6,12 @@ extern "C" {
 
 #define vec(T)                  T *
 
-#define vecFree(vec)            ((vec) ? free(_vecheader(vec)),NULL : NULL)
+#define vecFree(vec)            ((vec) ? free(_vecheader(vec)), NULL : NULL)
 #define vecCopy(src, dest)      (vecFree(dest), vecAdd(dest, vecCount(src)), memcpy(dest, src, vecCount(src)))
 
-#define vecAppend(vec, val)     (_vecmaygrow(vec, 1), (vec)[_veclen(vec)] = (val), _veclen(vec)++)
+#define vecAppend(vec, ...)     (_vecmaygrow(vec, 1), (vec)[_veclen(vec)] = (__VA_ARGS__), _veclen(vec)++)
+#define vecRemove(vec, ind)     ((vec) ? (vec)[(ind)] = (vec)[--_veclen(vec)], NULL : 0)
+#define vecRemoveIt(vec, it)    (vecRemove((vec), (it) - (vec)))
 #define vecLen(vec)             ((vec) ? _veclen(vec) : 0)
 #define vecCap(vec)             ((vec) ? _veccap(vec) : 0)
 

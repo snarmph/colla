@@ -6,8 +6,11 @@
 
 // == INI READER ========================================================================
 
-static const iniopts_t default_opts = {0};
+static const iniopts_t default_opts = {
+    .key_value_divider = '='
+};
 
+static iniopts_t setDefaultOptions(const iniopts_t *options);
 static initable_t *findTable(ini_t *ctx, strview_t name);
 static inivalue_t *findValue(vec(inivalue_t) values, strview_t key);
 static void addTable(ini_t *ctx, str_istream_t *in, const iniopts_t *options);
@@ -32,14 +35,13 @@ void _iniParseInternal(ini_t *ini, const iniopts_t *options) {
         }
         istrSkipWhitespace(&in);
     }
-    
 }
 
 ini_t iniParse(const char *filename, const iniopts_t *options) {
     ini_t ini = { .text = fileReadWholeText(filename) };
     if (strIsEmpty(ini.text)) return ini;
-    if (!options) options = &default_opts;
-    _iniParseInternal(&ini, options);
+    iniopts_t opts = setDefaultOptions(options);
+    _iniParseInternal(&ini, &opts);
     return ini;
 }
 
@@ -265,6 +267,23 @@ winitable_t *winiAddTabView(iniwriter_t *ctx, strview_t name) {
 
 // == PRIVATE FUNCTIONS ========================================================
 
+static iniopts_t setDefaultOptions(const iniopts_t *options) {
+    if (!options) return default_opts;
+    
+    iniopts_t opts = default_opts;
+    
+    if (options->merge_duplicate_keys) 
+        opts.merge_duplicate_keys = options->merge_duplicate_keys;
+    
+    if (options->merge_duplicate_tables) 
+        opts.merge_duplicate_tables = options->merge_duplicate_tables;
+    
+    if (options->key_value_divider) 
+        opts.key_value_divider = options->key_value_divider;
+    
+    return opts;
+}
+
 static initable_t *findTable(ini_t *ctx, strview_t name) {
     if (strvIsEmpty(name)) return NULL;
     for (uint32 i = 1; i < vecLen(ctx->tables); ++i) {
@@ -312,7 +331,7 @@ static void addTable(ini_t *ctx, str_istream_t *in, const iniopts_t *options) {
 static void addValue(initable_t *table, str_istream_t *in, const iniopts_t *options) {
     if (!table) fatal("table is null");
     
-    strview_t key = strvTrim(istrGetview(in, '='));
+    strview_t key = strvTrim(istrGetview(in, options->key_value_divider));
     istrSkip(in, 1);
     strview_t value = strvTrim(istrGetview(in, '\n'));
     // value might be until EOF, in that case no use in skipping

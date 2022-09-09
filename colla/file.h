@@ -54,6 +54,9 @@ bool fileWriteWholeFP(file_t ctx, filebuf_t data);
 bool fileWriteWholeText(const char *fname, strview_t string);
 bool fileWriteWholeTextFP(file_t ctx, strview_t string);
 
+uint64 fileGetTime(file_t ctx);
+uint64 fileGetTimePath(const char *path);
+
 #ifdef __cplusplus
 } // extern "C"
 #endif

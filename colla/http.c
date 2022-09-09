@@ -4,7 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "os.h"
+// #include "os.h"
 #include "tracelog.h"
 
 #include "vec.h"
@@ -48,6 +48,62 @@ static void _setField(vec(http_field_t) *fields_vec, const char *key, const char
     vecAppend(*fields_vec, field);
 }
 
+static void _parseFields(vec(http_field_t) *fields, str_istream_t *in) {
+    strview_t line;
+
+    do {
+        line = istrGetview(in, '\r');
+
+        usize pos = strvFind(line, ':', 0);
+        if(pos != STRV_NOT_FOUND) {
+            strview_t key = strvSub(line, 0, pos);
+            strview_t value = strvSub(line, pos + 2, SIZE_MAX);
+
+            char *key_str = NULL;
+            char *value_str = NULL;
+
+            key_str = strvCopy(key).buf;
+            value_str = strvCopy(value).buf;
+
+            _setField(fields, key_str, value_str);
+
+            free(key_str);
+            free(value_str);
+        }
+
+        istrSkip(in, 2); // skip \r\n
+    } while(line.len > 2);
+}
+
+// == HTTP STATUS =============================================================
+
+const char *httpGetStatusString(resstatus_t status) {
+    switch (status) {
+        case STATUS_OK: return "OK";              
+        case STATUS_CREATED: return "CREATED";         
+        case STATUS_ACCEPTED: return "ACCEPTED";        
+        case STATUS_NO_CONTENT: return "NO CONTENT";      
+        case STATUS_RESET_CONTENT: return "RESET CONTENT";   
+        case STATUS_PARTIAL_CONTENT: return "PARTIAL CONTENT"; 
+        case STATUS_MULTIPLE_CHOICES: return "MULTIPLE CHOICES";    
+        case STATUS_MOVED_PERMANENTLY: return "MOVED PERMANENTLY";   
+        case STATUS_MOVED_TEMPORARILY: return "MOVED TEMPORARILY";   
+        case STATUS_NOT_MODIFIED: return "NOT MODIFIED";        
+        case STATUS_BAD_REQUEST: return "BAD REQUEST";             
+        case STATUS_UNAUTHORIZED: return "UNAUTHORIZED";            
+        case STATUS_FORBIDDEN: return "FORBIDDEN";               
+        case STATUS_NOT_FOUND: return "NOT FOUND";               
+        case STATUS_RANGE_NOT_SATISFIABLE: return "RANGE NOT SATISFIABLE";   
+        case STATUS_INTERNAL_SERVER_ERROR: return "INTERNAL SERVER_ERROR";   
+        case STATUS_NOT_IMPLEMENTED: return "NOT IMPLEMENTED";         
+        case STATUS_BAD_GATEWAY: return "BAD GATEWAY";             
+        case STATUS_SERVICE_NOT_AVAILABLE: return "SERVICE NOT AVAILABLE";   
+        case STATUS_GATEWAY_TIMEOUT: return "GATEWAY TIMEOUT";         
+        case STATUS_VERSION_NOT_SUPPORTED: return "VERSION NOT SUPPORTED";   
+    }
+    return "UNKNOWN";
+}
+
 // == HTTP VERSION ============================================================
 
 int httpVerNumber(http_version_t ver) {
@@ -57,22 +113,65 @@ int httpVerNumber(http_version_t ver) {
 // == HTTP REQUEST ============================================================
 
 http_request_t reqInit() {
-    http_request_t req;
-    memset(&req, 0, sizeof(req));
-    reqSetUri(&req, strvInit("/"));
+    http_request_t req = {0};
+    reqSetUri(&req, strvInit(""));
     req.version = (http_version_t){1, 1};
     return req;
 }
 
-void reqFree(http_request_t *ctx) {
-    for (uint32 i = 0; i < vecLen(ctx->fields); ++i) {
-        free(ctx->fields[i].key);
-        free(ctx->fields[i].value);
+http_request_t reqParse(const char *request) {
+    http_request_t req = {0};
+    str_istream_t in = istrInit(request);
+
+    // get data
+
+    strview_t method = strvTrim(istrGetview(&in, '/'));
+    istrSkip(&in, 1); // skip /
+    strview_t page   = strvTrim(istrGetview(&in, ' '));
+    strview_t http   = strvTrim(istrGetview(&in, '\n'));
+
+    istrSkip(&in, 1); // skip \n
+    
+    _parseFields(&req.fields, &in);
+
+    strview_t body = strvTrim(istrGetviewLen(&in, 0, SIZE_MAX));
+
+    // parse data
+
+    // -- method
+    const char *methods[] = { "GET", "POST", "HEAD", "PUT", "DELETE" };
+    const int methods_count = sizeof(methods) / sizeof(*methods);
+
+    for (int i = 0; i < methods_count; ++i) {
+        if (strvCompare(method, strvInit(methods[i])) == 0) {
+            req.method = (reqtype_t)i;
+        }
     }
-    vecFree(ctx->fields);
-    free(ctx->uri);
-    free(ctx->body);
-    memset(ctx, 0, sizeof(http_request_t));
+
+    // -- page
+    req.uri = strvCopy(page).buf;
+
+    // -- http
+    in = istrInitLen(http.buf, http.len);
+    istrIgnoreAndSkip(&in, '/'); // skip HTTP/
+    istrGetu8(&in, &req.version.major);
+    istrSkip(&in, 1); // skip .
+    istrGetu8(&in, &req.version.minor);
+
+    // -- body
+    req.body = strvCopy(body).buf;
+
+    return req;
+}
+
+void reqFree(http_request_t ctx) {
+    for (http_field_t *it = ctx.fields; it != vecEnd(ctx.fields); ++it) {
+        free(it->key);
+        free(it->value);
+    }
+    vecFree(ctx.fields);
+    free(ctx.uri);
+    free(ctx.body);
 }
 
 bool reqHasField(http_request_t *ctx, const char *key) {
@@ -91,15 +190,10 @@ void reqSetField(http_request_t *ctx, const char *key, const char *value) {
 void reqSetUri(http_request_t *ctx, strview_t uri) {
     if (strvIsEmpty(uri)) return;
     free(ctx->uri);
-    if (uri.buf[0] != '/') {
-        ctx->uri = (char *)realloc(ctx->uri, uri.len + 1);
-        ctx->uri[0] = '/';
-        memcpy(ctx->uri + 1, uri.buf, uri.len);
-        ctx->uri[uri.len] = '\0';
+    if (uri.buf[0] == '/') {
+        strvRemovePrefix(uri, 1);
     }
-    else {
-        ctx->uri = strvCopy(uri).buf;
-    }
+    ctx->uri = strvCopy(uri).buf;
 }
 
 str_ostream_t reqPrepare(http_request_t *ctx) {
@@ -115,7 +209,7 @@ str_ostream_t reqPrepare(http_request_t *ctx) {
     default: err("unrecognized method: %d", method); goto error;
     }
 
-    ostrPrintf(&out, "%s %s HTTP/%hhu.%hhu\r\n", 
+    ostrPrintf(&out, "%s /%s HTTP/%hhu.%hhu\r\n", 
         method, ctx->uri, ctx->version.major, ctx->version.minor
     );
 
@@ -139,18 +233,49 @@ str_t reqString(http_request_t *ctx) {
 
 // == HTTP RESPONSE ===========================================================
 
-http_response_t resInit() {
-    return (http_response_t) {0};
+http_response_t resParse(const char *data) {
+    http_response_t ctx = {0};
+    str_istream_t in = istrInit(data);
+
+    char hp[5];
+    istrGetstringBuf(&in, hp, 5);
+    if(stricmp(hp, "http") != 0) {
+        err("response doesn't start with 'HTTP', instead with %c%c%c%c", hp[0], hp[1], hp[2], hp[3]);
+        return ctx;
+    }
+    istrSkip(&in, 1); // skip /
+    istrGetu8(&in, &ctx.version.major);
+    istrSkip(&in, 1); // skip .
+    istrGetu8(&in, &ctx.version.minor);
+    istrGeti32(&in, (int32*)&ctx.status_code);
+
+    istrIgnore(&in, '\n');
+    istrSkip(&in, 1); // skip \n
+
+    resParseFields(&ctx, &in);
+
+    const char *tran_encoding = resGetField(&ctx, "transfer-encoding");
+    if(tran_encoding == NULL || stricmp(tran_encoding, "chunked")  != 0) {
+        strview_t body = istrGetviewLen(&in, 0, SIZE_MAX);
+        vecClear(ctx.body);
+        vecReserve(ctx.body, body.len);
+        memcpy(ctx.body, body.buf, body.len);
+    }
+    else {
+        // fatal("chunked encoding not implemented yet");
+        err("chunked encoding not implemented yet");
+    }
+
+    return ctx;
 }   
 
-void resFree(http_response_t *ctx) {
-    for(uint32 i = 0; i < vecLen(ctx->fields); ++i) {
-        free(ctx->fields[i].key);
-        free(ctx->fields[i].value);
+void resFree(http_response_t ctx) {
+    for (http_field_t *it = ctx.fields; it != vecEnd(ctx.fields); ++it) {
+        free(it->key);
+        free(it->value);
     }
-    vecFree(ctx->fields);
-    vecFree(ctx->body);
-    memset(ctx, 0, sizeof(http_response_t));
+    vecFree(ctx.fields);
+    vecFree(ctx.body);
 }
 
 bool resHasField(http_response_t *ctx, const char *key) {
@@ -162,6 +287,10 @@ bool resHasField(http_response_t *ctx, const char *key) {
     return false;
 }
 
+void resSetField(http_response_t *ctx, const char *key, const char *value) {
+    _setField(&ctx->fields, key, value);
+}
+
 const char *resGetField(http_response_t *ctx, const char *field) {
     for(uint32 i = 0; i < vecLen(ctx->fields); ++i) {
         if(stricmp(ctx->fields[i].key, field) == 0) {
@@ -171,63 +300,30 @@ const char *resGetField(http_response_t *ctx, const char *field) {
     return NULL;
 }
 
-void resParse(http_response_t *ctx, const char *data) {
-    str_istream_t in = istrInit(data);
-
-    char hp[5];
-    istrGetstringBuf(&in, hp, 5);
-    if(stricmp(hp, "http") != 0) {
-        err("response doesn't start with 'HTTP', instead with %c%c%c%c", hp[0], hp[1], hp[2], hp[3]);
-        return;
-    }
-    istrSkip(&in, 1); // skip /
-    istrGetu8(&in, &ctx->version.major);
-    istrSkip(&in, 1); // skip .
-    istrGetu8(&in, &ctx->version.minor);
-    istrGeti32(&in, (int32*)&ctx->status_code);
-
-    istrIgnore(&in, '\n');
-    istrSkip(&in, 1); // skip \n
-
-    resParseFields(ctx, &in);
-
-    const char *tran_encoding = resGetField(ctx, "transfer-encoding");
-    if(tran_encoding == NULL || stricmp(tran_encoding, "chunked")  != 0) {
-        strview_t body = istrGetviewLen(&in, 0, SIZE_MAX);
-        vecClear(ctx->body);
-        vecReserve(ctx->body, body.len);
-        memcpy(ctx->body, body.buf, body.len);
-    }
-    else {
-        fatal("chunked encoding not implemented yet");
-    }
+void resParseFields(http_response_t *ctx, str_istream_t *in) {
+    _parseFields(&ctx->fields, in);
 }
 
-void resParseFields(http_response_t *ctx, str_istream_t *in) {
-    strview_t line;
+str_ostream_t resPrepare(http_response_t *ctx) {
+    str_ostream_t out = ostrInitLen(1024);
 
-    do {
-        line = istrGetview(in, '\r');
+    ostrPrintf(
+        &out, "HTTP/%hhu.%hhu %d %s\r\n", 
+        ctx->version.major, ctx->version.minor, 
+        ctx->status_code, httpGetStatusString(ctx->status_code)
+    );
+    for (http_field_t *field = ctx->fields; field != vecEnd(ctx->fields); ++field) {
+        ostrPrintf(&out, "%s: %s\r\n", field->key, field->value);
+    }
+    ostrPuts(&out, "\r\n");
+    ostrAppendview(&out, strvInitLen(ctx->body, vecLen(ctx->body)));
 
-        usize pos = strvFind(line, ':', 0);
-        if(pos != STRV_NOT_FOUND) {
-            strview_t key = strvSub(line, 0, pos);
-            strview_t value = strvSub(line, pos + 2, SIZE_MAX);
+    return out;
+}
 
-            char *key_str = NULL;
-            char *value_str = NULL;
-
-            key_str = strvCopy(key).buf;
-            value_str = strvCopy(value).buf;
-
-            _setField(&ctx->fields, key_str, value_str);
-
-            free(key_str);
-            free(value_str);
-        }
-
-        istrSkip(in, 2); // skip \r\n
-    } while(line.len > 2);
+str_t resString(http_response_t *ctx) {
+    str_ostream_t out = resPrepare(ctx);
+    return ostrAsStr(out);
 }
 
 // == HTTP CLIENT =============================================================
@@ -238,9 +334,8 @@ http_client_t hcliInit() {
     };
 }
 
-void hcliFree(http_client_t *ctx) {
-    strFree(ctx->host_name);
-    memset(ctx, 0, sizeof(http_client_t));
+void hcliFree(http_client_t ctx) {
+    strFree(ctx.host_name);
 }
 
 void hcliSetHost(http_client_t *ctx, strview_t hostname) {
@@ -283,7 +378,7 @@ http_response_t hcliSendRequest(http_client_t *ctx, http_request_t *req) {
         reqSetField(req, "Connection", "close");
     }
 
-    http_response_t res = resInit();
+    http_response_t res = {0};
     str_t req_str = strInit();
     str_ostream_t received = ostrInitLen(1024);
 
@@ -327,7 +422,7 @@ http_response_t hcliSendRequest(http_client_t *ctx, http_request_t *req) {
             received.len--;
         }
         
-        resParse(&res, received.buf);
+        res = resParse(received.buf);
     }
     else {
         err("Couldn't connect to host %s -> %s", ctx->host_name, skGetErrorString());
@@ -357,8 +452,8 @@ http_response_t httpGet(strview_t hostname, strview_t uri) {
 
     http_response_t res = hcliSendRequest(&client, &request);
 
-    reqFree(&request);
-    hcliFree(&client);
+    reqFree(request);
+    hcliFree(client);
 
     return res;
 }

@@ -32,6 +32,7 @@ extern "C" {
 
 typedef struct sockaddr sk_addr_t;
 typedef struct sockaddr_in sk_addrin_t;
+typedef struct pollfd skpoll_t;
 
 typedef enum {
     SOCK_TCP,
@@ -54,11 +55,14 @@ socket_t skOpenEx(const char *protocol);
 // Opens a socket, check socket_t with skValid
 socket_t skOpenPro(int af, int type, int protocol);
 
-// Fill out a sk_addrin_t structure with "ip" and "port"
-sk_addrin_t skAddrinInit(const char *ip, uint16_t port);
+// Checks that a opened socket is valid, returns true on success
+bool skIsValid(socket_t sock);
 
 // Closes a socket, returns true on success
 bool skClose(socket_t sock);
+
+// Fill out a sk_addrin_t structure with "ip" and "port"
+sk_addrin_t skAddrinInit(const char *ip, uint16_t port);
 
 // Associate a local address with a socket
 bool skBind(socket_t sock, const char *ip, uint16_t port);
@@ -97,8 +101,8 @@ int skReceiveFrom(socket_t sock, void *buf, int len, sk_addrin_t *from);
 // Receives a datagram and stores the source address. 
 int skReceiveFromPro(socket_t sock, void *buf, int len, int flags, sk_addr_t *from, sk_len_t *fromlen);
 
-// Checks that a opened socket is valid, returns true on success
-bool skIsValid(socket_t sock);
+// Wait for an event on some sockets
+int skPoll(skpoll_t *to_poll, int num_to_poll, int timeout);
 
 // Returns latest socket error, returns 0 if there is no error
 int skGetError(void);

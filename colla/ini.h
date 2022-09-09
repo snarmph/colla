@@ -27,8 +27,9 @@ typedef struct {
 } ini_t;
 
 typedef struct {
-    bool merge_duplicate_tables;
-    bool merge_duplicate_keys;
+    bool merge_duplicate_tables; // default false
+    bool merge_duplicate_keys;   // default false
+    char key_value_divider;      // default =
 } iniopts_t;
 
 ini_t iniParse(const char *filename, const iniopts_t *options);
@@ -63,7 +64,8 @@ typedef struct {
 } iniwriter_t;
 
 typedef struct {
-    bool no_discalimer;
+    bool no_discalimer;     // default false
+    char key_value_divider; // default =
 } winiopts_t;
 
 iniwriter_t winiInit();

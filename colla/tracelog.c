@@ -72,7 +72,15 @@ void traceLog(int level, const char *fmt, ...) {
     va_end(args);
 }
 
+#include "cthreads.h"
+
+static cmutex_t g_mtx = 0;
+
 void traceLogVaList(int level, const char *fmt, va_list args) {
+    if (!g_mtx) g_mtx = mtxInit();
+
+    mtxLock(g_mtx);
+
     char buffer[MAX_TRACELOG_MSG_LENGTH];
     memset(buffer, 0, sizeof(buffer));
 
@@ -115,6 +123,8 @@ void traceLogVaList(int level, const char *fmt, va_list args) {
 #ifndef TLOG_DONT_EXIT_ON_FATAL
     if (level == LogFatal) exit(1);
 #endif
+
+    mtxUnlock(g_mtx);
 }
 
 void traceUseNewline(bool newline) {

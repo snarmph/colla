@@ -21,6 +21,7 @@ static const char *_win_skGetErrorString();
 #include <unistd.h>
 #include <errno.h>
 #include <string.h> // strerror
+#include <poll.h>
 
 #define INVALID_SOCKET (-1)
 #define SOCKET_ERROR   (-1)
@@ -185,6 +186,14 @@ int skReceiveFrom(socket_t sock, void *buf, int len, sk_addrin_t *from) {
 
 int skReceiveFromPro(socket_t sock, void *buf, int len, int flags, sk_addr_t *from, sk_len_t *fromlen) {
     return recvfrom(sock, buf, len, flags, from, fromlen);
+}
+
+int skPoll(skpoll_t *to_poll, int num_to_poll, int timeout) {
+#if SOCK_WINDOWS
+    return WSAPoll(to_poll, num_to_poll, timeout);
+#elif SOCK_POSIX
+    return poll(to_poll, num_to_poll, timeout);
+#endif
 }
 
 bool skIsValid(socket_t sock) {

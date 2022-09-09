@@ -29,7 +29,7 @@ bool thrJoin(cthread_t ctx, int *code);
 typedef uintptr_t cmutex_t;
 
 cmutex_t mtxInit(void);
-void mtxDestroy(cmutex_t ctx);
+void mtxFree(cmutex_t ctx);
 
 bool mtxValid(cmutex_t ctx);
 
@@ -61,6 +61,21 @@ struct lock_t {
     cmutex_t mutex;
 };
 #endif
+
+// == CONDITION VARIABLE ===============================
+
+typedef uintptr_t condvar_t;
+
+#define COND_WAIT_INFINITE 0xFFFFFFFF
+
+condvar_t condInit(void);
+void condFree(condvar_t cond);
+
+void condWake(condvar_t cond);
+void condWakeAll(condvar_t cond);
+
+void condWait(condvar_t cond, cmutex_t mtx);
+void condWaitTimed(condvar_t cond, cmutex_t mtx, int milliseconds);
 
 #ifdef __cplusplus
 } // extern "C"

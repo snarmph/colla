@@ -24,10 +24,7 @@ static DWORD _toWin32Creation(filemode_t mode) {
 }
 
 bool fileExists(const char *fname) {
-    DWORD dwAttrib = GetFileAttributesA(fname);
-
-    return (dwAttrib != INVALID_FILE_ATTRIBUTES && 
-           !(dwAttrib & FILE_ATTRIBUTE_DIRECTORY));
+    return GetFileAttributesA(fname) != INVALID_FILE_ATTRIBUTES;
 }
 
 file_t fileOpen(const char *fname, filemode_t mode) {
@@ -93,6 +90,12 @@ uint64 fileTell(file_t ctx) {
     LARGE_INTEGER tell;
     BOOL result = SetFilePointerEx((HANDLE)ctx, (LARGE_INTEGER){0}, &tell, FILE_CURRENT);
     return result == TRUE ? (uint64)tell.QuadPart : 0;
+}
+
+uint64 fileGetTime(file_t ctx) {
+    uint64 fp_time = 0;
+    GetFileTime((HANDLE)ctx, NULL, NULL, (FILETIME *)&fp_time);
+    return fp_time;
 }
 
 #else
@@ -163,6 +166,10 @@ void fileRewind(file_t ctx) {
 
 uint64 fileTell(file_t ctx) {
     return (uint64)ftell((FILE*)ctx);
+}
+
+uint64 fileGetTime(file_t ctx) {
+
 }
 #endif
 
@@ -291,4 +298,14 @@ bool fileWriteWholeText(const char *fname, strview_t string) {
 
 bool fileWriteWholeTextFP(file_t ctx, strview_t string) {
     return fileWriteWholeFP(ctx, (filebuf_t){ (uint8 *)string.buf, string.len });
+}
+
+uint64 fileGetTimePath(const char *path) {
+    file_t fp = fileOpen(path, FILE_READ);
+    if (!fileIsValid(fp)) {
+        return 0;
+    }
+    uint64 fp_time = fileGetTime(fp);
+    fileClose(fp);
+    return fp_time;
 }
