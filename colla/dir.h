@@ -27,6 +27,7 @@ bool dirValid(dir_t ctx);
 dir_entry_t *dirNext(dir_t ctx);
 
 void dirCreate(const char *path);
+bool dirRemove(const char *path);
 
 #ifdef __cplusplus
 } // extern "C"

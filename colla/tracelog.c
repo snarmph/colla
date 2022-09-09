@@ -72,14 +72,16 @@ void traceLog(int level, const char *fmt, ...) {
     va_end(args);
 }
 
+#ifdef TLOG_MUTEX
 #include "cthreads.h"
-
 static cmutex_t g_mtx = 0;
+#endif
 
 void traceLogVaList(int level, const char *fmt, va_list args) {
+    #ifdef TLOG_MUTEX
     if (!g_mtx) g_mtx = mtxInit();
-
     mtxLock(g_mtx);
+    #endif
 
     char buffer[MAX_TRACELOG_MSG_LENGTH];
     memset(buffer, 0, sizeof(buffer));
@@ -124,9 +126,28 @@ void traceLogVaList(int level, const char *fmt, va_list args) {
     if (level == LogFatal) exit(1);
 #endif
 
+    #ifdef TLOG_MUTEX
     mtxUnlock(g_mtx);
+    #endif
 }
 
 void traceUseNewline(bool newline) {
     use_newline = newline;
+}
+
+void traceSetColour(colour_e colour) {
+#ifdef TLOG_WIN32_NO_VS
+    SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), colour);
+#else
+    switch (colour) {
+        case COL_RESET:   printf(RESET);   break;
+        case COL_BLACK:   printf(BLACK);   break;
+        case COL_BLUE:    printf(BLUE);    break;
+        case COL_GREEN:   printf(GREEN);   break;
+        case COL_CYAN:    printf(CYAN);    break;
+        case COL_RED:     printf(RED);     break;
+        case COL_MAGENTA: printf(MAGENTA); break;
+        case COL_YELLOW:  printf(YELLOW);  break;
+    }
+#endif
 }

@@ -164,3 +164,41 @@ void dirCreate(const char *path) {
 }
 
 #endif
+
+#include <stdio.h>
+
+bool dirRemove(const char *path) {
+    dir_t dir = dirOpen(path);
+    if (!dirValid(dir)) return false;
+    dir_entry_t *it = NULL;
+    while((it = dirNext(dir))) {
+        if (it->type == FS_TYPE_FILE) {
+            str_t file_path = strFromFmt("%s/%s", path, it->name.buf);
+            if (remove(file_path.buf)) {
+                err("couldn't remove %s > %s", file_path.buf, strerror(errno));
+            }
+            strFree(file_path);
+        }
+        else if (it->type == FS_TYPE_DIR) {
+            if (strcmp(it->name.buf, ".") == 0 || strcmp(it->name.buf, "..") == 0) {
+                continue;
+            }
+            str_t new_path = strFromFmt("%s/%s", path, it->name.buf);
+            info("new path: %s--%s -> %s", path, it->name.buf, new_path.buf);
+            if (!dirRemove(new_path.buf)) {
+                err("couldn't delete folder %s", new_path.buf);
+                break;
+            }
+            strFree(new_path);
+        }
+        else {
+            err("%d -> %s", it->type, it->name.buf);
+        }
+    }
+    dirClose(dir);
+#ifdef _WIN32
+    return RemoveDirectoryA(path);
+#else
+    return rmdir(path) == 0;
+#endif
+}

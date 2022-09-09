@@ -411,8 +411,10 @@ usize strvFindView(strview_t ctx, strview_t view, usize from) {
 
 usize strvRFind(strview_t ctx, char c, usize from) {
     if(from >= ctx.len) {
-        from = ctx.len - 1;
+        from = ctx.len;
     }
+
+    from = ctx.len - from;
 
     const char *buf = ctx.buf + from;
     for(; buf >= ctx.buf; --buf) {
@@ -423,11 +425,16 @@ usize strvRFind(strview_t ctx, char c, usize from) {
 }
 
 usize strvRFindView(strview_t ctx, strview_t view, usize from) {
-    from = min(from, ctx.len);
-
     if(view.len > ctx.len) {
-        from -= view.len;
+        return SIZE_MAX;
     }
+
+    if(from > ctx.len) {
+        from = ctx.len;
+    }
+
+    from = ctx.len - from;
+    from -= view.len;
 
     const char *buf = ctx.buf + from;
     for(; buf >= ctx.buf; --buf) {
