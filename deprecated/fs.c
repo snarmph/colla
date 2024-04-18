@@ -7,7 +7,7 @@
 
 #include "tracelog.h"
 
-#ifdef _WIN32
+#if COLLA_WIN
 #include "win32_slim.h"
 
 #include <sys/stat.h>

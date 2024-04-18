@@ -1,19 +1,15 @@
 #pragma once
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-#include <stdbool.h>
-#include <stddef.h>
-#include <limits.h>
-#include <wchar.h>
+#include <stdarg.h> // va_list
+#include <string.h> // strlen
 
 #include "collatypes.h"
 
-#define STRV_NOT_FOUND SIZE_MAX
+typedef struct arena_t arena_t;
 
-typedef struct str_t {
+#define STR_NONE SIZE_MAX
+
+typedef struct {
     char *buf;
     usize len;
 } str_t;
@@ -25,73 +21,77 @@ typedef struct {
 
 // == STR_T ========================================================
 
-str_t strInit(void);
-str_t strFromStr(const char *cstr);
-str_t strFromView(strview_t view);
-str_t strFromBuf(const char *buf, usize len);
-str_t strFromFmt(const char *fmt, ...);
+#define str__1(arena, x)            \
+    _Generic((x),                   \
+        const char *: strInit,      \
+        char *:       strInit,      \
+        strview_t:    strInitView   \
+    )(arena, x)
 
-str_t strFromWCHAR(const wchar_t *src, usize len);
-wchar_t *strToWCHAR(str_t ctx);
+#define str__2(arena, cstr, clen) strInitLen(arena, cstr, clen)
+#define str__impl(_1, _2, n, ...) str__##n
 
-void strFree(str_t ctx);
-str_t strDup(str_t ctx);
-str_t strMove(str_t *ctx);
+// either:
+//     arena_t arena, [const] char *cstr, [usize len]
+//     arena_t arena, strview_t view
+#define str(arena, ...) str__impl(__VA_ARGS__, 2, 1, 0)(arena, __VA_ARGS__)
 
-strview_t strGetView(str_t ctx);
+str_t strInit(arena_t *arena, const char *buf);
+str_t strInitLen(arena_t *arena, const char *buf, usize len);
+str_t strInitView(arena_t *arena, strview_t view);
+str_t strFmt(arena_t *arena, const char *fmt, ...);
+str_t strFmtv(arena_t *arena, const char *fmt, va_list args);
 
-char *strBegin(str_t ctx);
-char *strEnd(str_t ctx);
-char strBack(str_t ctx);
+str_t strFromWChar(arena_t *arena, const wchar_t *src, usize srclen);
 
+bool strEquals(str_t a, str_t b);
+int strCompare(str_t a, str_t b);
+
+str_t strDup(arena_t *arena, str_t src);
 bool strIsEmpty(str_t ctx);
-void strReplace(str_t *ctx, char from, char to);
 
+void strReplace(str_t *ctx, char from, char to);
 // if len == SIZE_MAX, copies until end
-str_t strSubstr(str_t ctx, usize from, usize to);
-// if len == SIZE_MAX, returns until end
-strview_t strSubview(str_t ctx, usize from, usize to);
+strview_t strSub(str_t ctx, usize from, usize to);
 
 void strLower(str_t *ctx);
-str_t strToLower(str_t ctx);
-
 void strUpper(str_t *ctx);
-str_t strToUpper(str_t ctx);
 
-#ifdef STR_TESTING
-void strTest(void);
-#endif
+str_t strToLower(arena_t *arena, str_t ctx);
+str_t strToUpper(arena_t *arena, str_t ctx);
 
 // == STRVIEW_T ====================================================
 
-strview_t strvInit(const char *cstr);
-strview_t strvInitStr(str_t str);
-strview_t strvInitLen(const char *buf, usize size);
+#define strv__1(x)                  \
+    _Generic((x),                   \
+        char *:       strvInit,     \
+        const char *: strvInit,     \
+        str_t:        strvInitStr   \
+    )(x)
 
-char strvFront(strview_t ctx);
-char strvBack(strview_t ctx);
-const char *strvBegin(strview_t ctx);
-const char *strvEnd(strview_t ctx);
-// move view forward by n characters
-strview_t strvRemovePrefix(strview_t ctx, usize n);
-// move view backwards by n characters
-strview_t strvRemoveSuffix(strview_t ctx, usize n);
-// removes whitespace from the beginning and the end
-strview_t strvTrim(strview_t ctx);
-// removes whitespace from the beginning
-strview_t strvTrimLeft(strview_t ctx);
-// removes whitespace from the end
-strview_t strvTrimRight(strview_t ctx);
+#define strv__2(cstr, clen) strvInitLen(cstr, clen)
+#define strv__impl(_1, _2, n, ...) strv__##n
+
+#define strv(...) strv__impl(__VA_ARGS__, 2, 1, 0)(__VA_ARGS__)
+
+strview_t strvInit(const char *cstr);
+strview_t strvInitLen(const char *buf, usize size);
+strview_t strvInitStr(str_t str);
 
 bool strvIsEmpty(strview_t ctx);
+bool strvEquals(strview_t a, strview_t b);
+int strvCompare(strview_t a, strview_t b);
 
-str_t strvCopy(strview_t ctx);
-str_t strvCopyN(strview_t ctx, usize count, usize from);
-usize strvCopyBuf(strview_t ctx, char *buf, usize len, usize from);
+wchar_t *strvToWChar(arena_t *arena, strview_t ctx, usize *outlen);
+TCHAR *strvToTChar(arena_t *arena, strview_t str);
+
+strview_t strvRemovePrefix(strview_t ctx, usize n);
+strview_t strvRemoveSuffix(strview_t ctx, usize n);
+strview_t strvTrim(strview_t ctx);
+strview_t strvTrimLeft(strview_t ctx);
+strview_t strvTrimRight(strview_t ctx);
 
 strview_t strvSub(strview_t ctx, usize from, usize to);
-int strvCompare(strview_t ctx, strview_t other);
-int strvICompare(strview_t ctx, strview_t other);
 
 bool strvStartsWith(strview_t ctx, char c);
 bool strvStartsWithView(strview_t ctx, strview_t view);
@@ -105,18 +105,5 @@ bool strvContainsView(strview_t ctx, strview_t view);
 usize strvFind(strview_t ctx, char c, usize from);
 usize strvFindView(strview_t ctx, strview_t view, usize from);
 
-usize strvRFind(strview_t ctx, char c, usize from);
-usize strvRFindView(strview_t ctx, strview_t view, usize from);
-
-// Finds the first occurrence of any of the characters of 'view' in this view
-usize strvFindFirstOf(strview_t ctx, strview_t view, usize from);
-usize strvFindLastOf(strview_t ctx, strview_t view, usize from);
-
-usize strvFindFirstNot(strview_t ctx, char c, usize from);
-usize strvFindFirstNotOf(strview_t ctx, strview_t view, usize from);
-usize strvFindLastNot(strview_t ctx, char c, usize from);
-usize strvFindLastNotOf(strview_t ctx, strview_t view, usize from);
-
-#ifdef __cplusplus
-} // extern "C"
-#endif
+usize strvRFind(strview_t ctx, char c, usize from_right);
+usize strvRFindView(strview_t ctx, strview_t view, usize from_right);

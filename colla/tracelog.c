@@ -4,9 +4,32 @@
 #include <string.h>
 #include <stdlib.h>
 
-#ifdef _WIN32 
-    #pragma warning(disable:4996) // _CRT_SECURE_NO_WARNINGS.
-    #include "win32_slim.h"
+#include "format.h"
+
+#if COLLA_WIN
+    #if COLLA_MSVC
+        #pragma warning(disable:4996) // _CRT_SECURE_NO_WARNINGS.
+    #endif
+
+    #include <handleapi.h>
+    
+    // avoid including windows.h
+    
+    #ifndef STD_OUTPUT_HANDLE
+        #define STD_OUTPUT_HANDLE   ((DWORD)-11)
+    #endif
+    #ifndef CP_UTF8
+        #define CP_UTF8             65001
+    #endif
+
+    typedef unsigned short WORD;
+    typedef unsigned long DWORD;
+    typedef unsigned int UINT;
+    typedef int BOOL;
+    WINBASEAPI HANDLE WINAPI GetStdHandle(DWORD nStdHandle);
+    WINBASEAPI BOOL WINAPI SetConsoleTextAttribute(HANDLE hConsoleOutput, WORD wAttributes);
+    WINBASEAPI BOOL WINAPI SetConsoleOutputCP(UINT wCodePageID);
+
     #ifndef TLOG_VS
         #define TLOG_WIN32_NO_VS
         #ifndef TLOG_NO_COLOURS
@@ -16,33 +39,33 @@
 #endif
 
 #ifdef TLOG_VS
-    #ifndef _WIN32
+    #if COLLA_WIN
         #error "can't use TLOG_VS if not on windows"
     #endif
 #endif
 
 #ifdef TLOG_NO_COLOURS
-    #define BLACK   ""
-    #define RED     ""
-    #define GREEN   ""
-    #define YELLOW  ""
-    #define BLUE    ""
-    #define MAGENTA ""
-    #define CYAN    ""
-    #define WHITE   ""
-    #define RESET   ""
-    #define BOLD    ""
+    #define COLOUR_BLACK   ""
+    #define COLOUR_RED     ""
+    #define COLOUR_GREEN   ""
+    #define COLOUR_YELLOW  ""
+    #define COLOUR_BLUE    ""
+    #define COLOUR_MAGENTA ""
+    #define COLOUR_CYAN    ""
+    #define COLOUR_WHITE   ""
+    #define COLOUR_RESET   ""
+    #define COLOUR_BOLD    ""
 #else
-    #define BLACK   "\033[30m"
-    #define RED     "\033[31m"
-    #define GREEN   "\033[32m"
-    #define YELLOW  "\033[33m"
-    #define BLUE    "\033[22;34m"
-    #define MAGENTA "\033[35m"
-    #define CYAN    "\033[36m"
-    #define WHITE   "\033[37m"
-    #define RESET   "\033[0m"
-    #define BOLD    "\033[1m"
+    #define COLOUR_BLACK   "\033[30m"
+    #define COLOUR_RED     "\033[31m"
+    #define COLOUR_GREEN   "\033[32m"
+    #define COLOUR_YELLOW  "\033[33m"
+    #define COLOUR_BLUE    "\033[22;34m"
+    #define COLOUR_MAGENTA "\033[35m"
+    #define COLOUR_CYAN    "\033[36m"
+    #define COLOUR_WHITE   "\033[37m"
+    #define COLOUR_RESET   "\033[0m"
+    #define COLOUR_BOLD    "\033[1m"
 #endif
 
 #define MAX_TRACELOG_MSG_LENGTH 1024
@@ -67,8 +90,7 @@ static void setLevelColour(int level) {
 
 void traceLog(int level, const char *fmt, ...) {
     va_list args;
-    va_start(args, fmt);
-    traceLogVaList(level, fmt, args);
+    va_start(args, fmt);    traceLogVaList(level, fmt, args);
     va_end(args);
 }
 
@@ -88,12 +110,12 @@ void traceLogVaList(int level, const char *fmt, va_list args) {
 
     const char *beg;
     switch (level) {
-        case LogTrace:   beg = BOLD WHITE  "[TRACE]: "   RESET; break; 
-        case LogDebug:   beg = BOLD BLUE   "[DEBUG]: "   RESET; break; 
-        case LogInfo:    beg = BOLD GREEN  "[INFO]: "    RESET; break; 
-        case LogWarning: beg = BOLD YELLOW "[WARNING]: " RESET; break; 
-        case LogError:   beg = BOLD RED    "[ERROR]: "   RESET; break; 
-        case LogFatal:   beg = BOLD RED    "[FATAL]: "   RESET; break;        
+        case LogTrace:   beg = COLOUR_BOLD COLOUR_WHITE  "[TRACE]: "   COLOUR_RESET; break; 
+        case LogDebug:   beg = COLOUR_BOLD COLOUR_BLUE   "[DEBUG]: "   COLOUR_RESET; break; 
+        case LogInfo:    beg = COLOUR_BOLD COLOUR_GREEN  "[INFO]: "    COLOUR_RESET; break; 
+        case LogWarning: beg = COLOUR_BOLD COLOUR_YELLOW "[WARNING]: " COLOUR_RESET; break; 
+        case LogError:   beg = COLOUR_BOLD COLOUR_RED    "[ERROR]: "   COLOUR_RESET; break; 
+        case LogFatal:   beg = COLOUR_BOLD COLOUR_RED    "[FATAL]: "   COLOUR_RESET; break;        
         default:         beg = "";                              break;
     }
 
@@ -104,7 +126,7 @@ void traceLogVaList(int level, const char *fmt, va_list args) {
     strncpy(buffer, beg, sizeof(buffer));
 #endif
 
-    vsnprintf(buffer + offset, sizeof(buffer) - offset, fmt, args);
+    fmtBufferv(buffer + offset, sizeof(buffer) - offset, fmt, args);
 
 #if defined(TLOG_VS)
     OutputDebugStringA(buffer);
@@ -123,7 +145,10 @@ void traceLogVaList(int level, const char *fmt, va_list args) {
 #endif
 
 #ifndef TLOG_DONT_EXIT_ON_FATAL
-    if (level == LogFatal) exit(1);
+    if (level == LogFatal) {
+        abort();
+        exit(1);
+    }
 #endif
 
     #ifdef TLOG_MUTEX

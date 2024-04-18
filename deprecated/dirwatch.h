@@ -27,7 +27,7 @@ extern "C" {
  * }
  */
 
-#include <stdbool.h>
+#include "collatypes.h"
 #include "cthreads.h"
 
 enum {

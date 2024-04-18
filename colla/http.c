@@ -1,474 +1,507 @@
 #include "http.h"
 
-#include <string.h>
-#include <stdio.h>
-#include <stdlib.h>
+#include "warnings/colla_warn_beg.h"
 
-// #include "os.h"
+#include "arena.h"
+#include "strstream.h"
+#include "format.h"
+#include "socket.h"
 #include "tracelog.h"
 
-#include "vec.h"
+#if COLLA_WIN 
+    #if COLLA_CMT_LIB
+    #pragma comment(lib, "Wininet")
+    #endif
 
-#ifdef _WIN32
-    #define stricmp _stricmp
-#else
-    #include <strings.h> // strcasecmp
-    #define stricmp strcasecmp
+    #include <windows.h>
+    #include <wininet.h>
 #endif
 
-// == INTERNAL ================================================================
+static const TCHAR *https__get_method_str(http_method_e method);
 
-static void _setField(vec(http_field_t) *fields_vec, const char *key, const char *value) {
-    vec(http_field_t) fields = *fields_vec;
-
-    for (uint32 i = 0; i < vecLen(fields); ++i) {
-        if (stricmp(fields[i].key, key) == 0) {
-            char **curval = &fields[i].value;
-            usize curlen = strlen(*curval);
-            usize newlen = strlen(value);
-            if(newlen > curlen) {
-                *curval = (char *)realloc(*curval, newlen + 1);
-            }
-            memcpy(*curval, value, newlen);
-            (*curval)[newlen] = '\0';
-            return;
-        }
-    }
-
-    // otherwise, add it to the list
-    http_field_t field;
-    usize klen = strlen(key);
-    usize vlen = strlen(value);
-    field.key = (char *)malloc(klen + 1);
-    field.value = (char *)malloc(vlen + 1);
-    memcpy(field.key, key, klen);
-    memcpy(field.value, value, vlen);
-    field.key[klen] = field.value[vlen] = '\0';
-
-    vecAppend(*fields_vec, field);
-}
-
-static void _parseFields(vec(http_field_t) *fields, str_istream_t *in) {
-    strview_t line;
+static http_header_t *http__parse_headers(arena_t *arena, instream_t *in) {
+    http_header_t *head = NULL;
+    strview_t line = (strview_t){0};
 
     do {
-        line = istrGetview(in, '\r');
+        line = istrGetView(in, '\r');
 
         usize pos = strvFind(line, ':', 0);
-        if(pos != STRV_NOT_FOUND) {
-            strview_t key = strvSub(line, 0, pos);
-            strview_t value = strvSub(line, pos + 2, SIZE_MAX);
+        if (pos != STR_NONE) {
+            http_header_t *h = alloc(arena, http_header_t);
 
-            char *key_str = NULL;
-            char *value_str = NULL;
-
-            key_str = strvCopy(key).buf;
-            value_str = strvCopy(value).buf;
-
-            _setField(fields, key_str, value_str);
-
-            free(key_str);
-            free(value_str);
+            h->key   = strvSub(line, 0, pos);
+            h->value = strvSub(line, pos + 2, SIZE_MAX);
+            
+            h->next = head;
+            head = h;
         }
 
         istrSkip(in, 2); // skip \r\n
-    } while(line.len > 2);
+    } while (line.len > 2); // while line != "\r\n"
+
+    return head;
 }
 
-// == HTTP STATUS =============================================================
-
-const char *httpGetStatusString(resstatus_t status) {
+const char *httpGetStatusString(int status) {
     switch (status) {
-        case STATUS_OK: return "OK";              
-        case STATUS_CREATED: return "CREATED";         
-        case STATUS_ACCEPTED: return "ACCEPTED";        
-        case STATUS_NO_CONTENT: return "NO CONTENT";      
-        case STATUS_RESET_CONTENT: return "RESET CONTENT";   
-        case STATUS_PARTIAL_CONTENT: return "PARTIAL CONTENT"; 
-        case STATUS_MULTIPLE_CHOICES: return "MULTIPLE CHOICES";    
-        case STATUS_MOVED_PERMANENTLY: return "MOVED PERMANENTLY";   
-        case STATUS_MOVED_TEMPORARILY: return "MOVED TEMPORARILY";   
-        case STATUS_NOT_MODIFIED: return "NOT MODIFIED";        
-        case STATUS_BAD_REQUEST: return "BAD REQUEST";             
-        case STATUS_UNAUTHORIZED: return "UNAUTHORIZED";            
-        case STATUS_FORBIDDEN: return "FORBIDDEN";               
-        case STATUS_NOT_FOUND: return "NOT FOUND";               
-        case STATUS_RANGE_NOT_SATISFIABLE: return "RANGE NOT SATISFIABLE";   
-        case STATUS_INTERNAL_SERVER_ERROR: return "INTERNAL SERVER_ERROR";   
-        case STATUS_NOT_IMPLEMENTED: return "NOT IMPLEMENTED";         
-        case STATUS_BAD_GATEWAY: return "BAD GATEWAY";             
-        case STATUS_SERVICE_NOT_AVAILABLE: return "SERVICE NOT AVAILABLE";   
-        case STATUS_GATEWAY_TIMEOUT: return "GATEWAY TIMEOUT";         
-        case STATUS_VERSION_NOT_SUPPORTED: return "VERSION NOT SUPPORTED";   
+        case 200: return "OK";              
+        case 201: return "CREATED";         
+        case 202: return "ACCEPTED";        
+        case 204: return "NO CONTENT";      
+        case 205: return "RESET CONTENT";   
+        case 206: return "PARTIAL CONTENT"; 
+
+        case 300: return "MULTIPLE CHOICES";    
+        case 301: return "MOVED PERMANENTLY";   
+        case 302: return "MOVED TEMPORARILY";   
+        case 304: return "NOT MODIFIED";        
+
+        case 400: return "BAD REQUEST";             
+        case 401: return "UNAUTHORIZED";            
+        case 403: return "FORBIDDEN";               
+        case 404: return "NOT FOUND";               
+        case 407: return "RANGE NOT SATISFIABLE";   
+
+        case 500: return "INTERNAL SERVER_ERROR";   
+        case 501: return "NOT IMPLEMENTED";         
+        case 502: return "BAD GATEWAY";             
+        case 503: return "SERVICE NOT AVAILABLE";   
+        case 504: return "GATEWAY TIMEOUT";         
+        case 505: return "VERSION NOT SUPPORTED";   
     }
+    
     return "UNKNOWN";
 }
-
-// == HTTP VERSION ============================================================
 
 int httpVerNumber(http_version_t ver) {
     return (ver.major * 10) + ver.minor;
 }
 
-// == HTTP REQUEST ============================================================
+http_req_t httpParseReq(arena_t *arena, strview_t request) {
+    http_req_t req = {0};
+    instream_t in = istrInitLen(request.buf, request.len);
 
-http_request_t reqInit() {
-    http_request_t req = {0};
-    reqSetUri(&req, strvInit(""));
-    req.version = (http_version_t){1, 1};
-    return req;
-}
-
-http_request_t reqParse(const char *request) {
-    http_request_t req = {0};
-    str_istream_t in = istrInit(request);
-
-    // get data
-
-    strview_t method = strvTrim(istrGetview(&in, '/'));
+    strview_t method = strvTrim(istrGetView(&in, '/'));
     istrSkip(&in, 1); // skip /
-    strview_t page   = strvTrim(istrGetview(&in, ' '));
-    strview_t http   = strvTrim(istrGetview(&in, '\n'));
+    req.url          = strvTrim(istrGetView(&in, ' '));
+    strview_t http   = strvTrim(istrGetView(&in, '\n'));
 
     istrSkip(&in, 1); // skip \n
-    
-    _parseFields(&req.fields, &in);
 
-    strview_t body = strvTrim(istrGetviewLen(&in, 0, SIZE_MAX));
+    req.headers = http__parse_headers(arena, &in);
 
-    // parse data
+    req.body = strvTrim(istrGetViewLen(&in, SIZE_MAX));
 
-    // -- method
-    const char *methods[] = { "GET", "POST", "HEAD", "PUT", "DELETE" };
-    const int methods_count = sizeof(methods) / sizeof(*methods);
+    strview_t methods[] = { strv("GET"), strv("POST"), strv("HEAD"), strv("PUT"), strv("DELETE") };
+    usize methods_count = arrlen(methods);
 
-    for (int i = 0; i < methods_count; ++i) {
-        if (strvCompare(method, strvInit(methods[i])) == 0) {
-            req.method = (reqtype_t)i;
+    for (usize i = 0; i < methods_count; ++i) {
+        if (strvEquals(method, methods[i])) {
+            req.method = (http_method_e)i;
+            break;
         }
     }
 
-    // -- page
-    req.uri = strvCopy(page).buf;
-
-    // -- http
     in = istrInitLen(http.buf, http.len);
     istrIgnoreAndSkip(&in, '/'); // skip HTTP/
-    istrGetu8(&in, &req.version.major);
+    istrGetU8(&in, &req.version.major);
     istrSkip(&in, 1); // skip .
-    istrGetu8(&in, &req.version.minor);
-
-    // -- body
-    req.body = strvCopy(body).buf;
+    istrGetU8(&in, &req.version.minor);
 
     return req;
 }
 
-void reqFree(http_request_t ctx) {
-    for (http_field_t *it = ctx.fields; it != vecEnd(ctx.fields); ++it) {
-        free(it->key);
-        free(it->value);
-    }
-    vecFree(ctx.fields);
-    free(ctx.uri);
-    free(ctx.body);
-}
+http_res_t httpParseRes(arena_t *arena, strview_t response) {
+    http_res_t res = {0};
+    instream_t in = istrInitLen(response.buf, response.len);
 
-bool reqHasField(http_request_t *ctx, const char *key) {
-    for(uint32 i = 0; i < vecLen(ctx->fields); ++i) {
-        if(stricmp(ctx->fields[i].key, key) == 0) {
-            return true;
-        }
-    }
-    return false;
-}
-
-void reqSetField(http_request_t *ctx, const char *key, const char *value) {
-    _setField(&ctx->fields, key, value);
-}
-
-void reqSetUri(http_request_t *ctx, strview_t uri) {
-    if (strvIsEmpty(uri)) return;
-    free(ctx->uri);
-    if (uri.buf[0] == '/') {
-        strvRemovePrefix(uri, 1);
-    }
-    ctx->uri = strvCopy(uri).buf;
-}
-
-str_ostream_t reqPrepare(http_request_t *ctx) {
-    str_ostream_t out = ostrInitLen(1024);
-
-    const char *method = NULL;
-    switch(ctx->method) {
-    case REQ_GET:    method = "GET";    break;
-    case REQ_POST:   method = "POST";   break;
-    case REQ_HEAD:   method = "HEAD";   break;
-    case REQ_PUT:    method = "PUT";    break;
-    case REQ_DELETE: method = "DELETE"; break;
-    default: err("unrecognized method: %d", method); goto error;
-    }
-
-    ostrPrintf(&out, "%s /%s HTTP/%hhu.%hhu\r\n", 
-        method, ctx->uri, ctx->version.major, ctx->version.minor
-    );
-
-    for(uint32 i = 0; i < vecLen(ctx->fields); ++i) {
-        ostrPrintf(&out, "%s: %s\r\n", ctx->fields[i].key, ctx->fields[i].value);
-    }
-
-    ostrAppendview(&out, strvInit("\r\n"));
-    if(ctx->body) {
-        ostrAppendview(&out, strvInit(ctx->body));
-    }
-
-error:
-    return out;
-}
-
-str_t reqString(http_request_t *ctx) {
-    str_ostream_t out = reqPrepare(ctx);
-    return ostrAsStr(out);
-}
-
-// == HTTP RESPONSE ===========================================================
-
-http_response_t resParse(const char *data) {
-    http_response_t ctx = {0};
-    str_istream_t in = istrInit(data);
-
-    char hp[5];
-    istrGetstringBuf(&in, hp, 5);
-    if(stricmp(hp, "http") != 0) {
-        err("response doesn't start with 'HTTP', instead with %c%c%c%c", hp[0], hp[1], hp[2], hp[3]);
-        return ctx;
+    strview_t http = istrGetViewLen(&in, 5);
+    if (!strvEquals(http, strv("HTTP"))) {
+        err("response doesn't start with 'HTTP', instead with %v", http);
+        return (http_res_t){0};
     }
     istrSkip(&in, 1); // skip /
-    istrGetu8(&in, &ctx.version.major);
+    istrGetU8(&in, &res.version.major);
     istrSkip(&in, 1); // skip .
-    istrGetu8(&in, &ctx.version.minor);
-    istrGeti32(&in, (int32*)&ctx.status_code);
+    istrGetU8(&in, &res.version.minor);
+    istrGetI32(&in, (int32*)&res.status_code);
 
     istrIgnore(&in, '\n');
     istrSkip(&in, 1); // skip \n
 
-    resParseFields(&ctx, &in);
+    res.headers = http__parse_headers(arena, &in);
 
-    const char *tran_encoding = resGetField(&ctx, "transfer-encoding");
-    if(tran_encoding == NULL || stricmp(tran_encoding, "chunked")  != 0) {
-        strview_t body = istrGetviewLen(&in, 0, SIZE_MAX);
-        vecClear(ctx.body);
-        vecReserve(ctx.body, body.len);
-        memcpy(ctx.body, body.buf, body.len);
+    strview_t encoding = httpGetHeader(res.headers, strv("transfer-encoding"));
+    if (!strvEquals(encoding, strv("chunked"))) {
+        res.body = istrGetViewLen(&in, SIZE_MAX);
     }
     else {
-        // fatal("chunked encoding not implemented yet");
-        err("chunked encoding not implemented yet");
+        err("chunked encoding not implemented yet! body ignored");
     }
 
-    return ctx;
-}   
-
-void resFree(http_response_t ctx) {
-    for (http_field_t *it = ctx.fields; it != vecEnd(ctx.fields); ++it) {
-        free(it->key);
-        free(it->value);
-    }
-    vecFree(ctx.fields);
-    vecFree(ctx.body);
+    return res;
 }
 
-bool resHasField(http_response_t *ctx, const char *key) {
-    for(uint32 i = 0; i < vecLen(ctx->fields); ++i) {
-        if(stricmp(ctx->fields[i].key, key) == 0) {
+str_t httpReqToStr(arena_t *arena, http_req_t *req) {
+    outstream_t out = ostrInit(arena);
+
+    const char *method = NULL;
+    switch (req->method) {
+        case HTTP_GET:    method = "GET";       break;
+        case HTTP_POST:   method = "POST";      break;
+        case HTTP_HEAD:   method = "HEAD";      break;
+        case HTTP_PUT:    method = "PUT";       break;
+        case HTTP_DELETE: method = "DELETE";    break;
+        default: err("unrecognised method: %d", method); return (str_t){0};
+    }
+
+    ostrPrintf(
+        &out, 
+        "%s /%v HTTP/%hhu.%hhu\r\n",
+        method, req->url, req->version.major, req->version.minor
+    );
+
+    http_header_t *h = req->headers;
+    while (h) {
+        ostrPrintf(&out, "%v: %v\r\n", h->key, h->value);
+        h = h->next;
+    }
+
+    ostrPuts(&out, strv("\r\n"));
+    ostrPuts(&out, req->body);
+
+    return ostrAsStr(&out);
+}
+
+str_t httpResToStr(arena_t *arena, http_res_t *res) {
+    outstream_t out = ostrInit(arena);
+
+    ostrPrintf(
+        &out,
+        "HTTP/%hhu.%hhu %d %s\r\n",
+        res->version.major, 
+        res->version.minor,
+        res->status_code, 
+        httpGetStatusString(res->status_code)
+    );
+    ostrPuts(&out, strv("\r\n"));
+    ostrPuts(&out, res->body);
+
+    return ostrAsStr(&out);
+}
+
+bool httpHasHeader(http_header_t *headers, strview_t key) {
+    http_header_t *h = headers;
+    while (h) {
+        if (strvEquals(h->key, key)) {
             return true;
         }
+        h = h->next;
     }
     return false;
 }
 
-void resSetField(http_response_t *ctx, const char *key, const char *value) {
-    _setField(&ctx->fields, key, value);
+void httpSetHeader(http_header_t *headers, strview_t key, strview_t value) {
+    http_header_t *h = headers;
+    while (h) {
+        if (strvEquals(h->key, key)) {
+            h->value = value;
+            break;
+        }
+        h = h->next;
+    }
 }
 
-const char *resGetField(http_response_t *ctx, const char *field) {
-    for(uint32 i = 0; i < vecLen(ctx->fields); ++i) {
-        if(stricmp(ctx->fields[i].key, field) == 0) {
-            return ctx->fields[i].value;
+strview_t httpGetHeader(http_header_t *headers, strview_t key) {
+    http_header_t *h = headers;
+    while (h) {
+        if (strvEquals(h->key, key)) {
+            return h->value;
+        }
+        h = h->next;
+    }
+    return (strview_t){0};
+}
+
+str_t httpMakeUrlSafe(arena_t *arena, strview_t string) {
+    strview_t chars = strv(" !\"#$%%&'()*+,/:;=?@[]");
+    usize final_len = string.len;
+
+    // find final string length first
+    for (usize i = 0; i < string.len; ++i) {
+        if (strvContains(chars, string.buf[i])) {
+            final_len += 2;
         }
     }
-    return NULL;
-}
-
-void resParseFields(http_response_t *ctx, str_istream_t *in) {
-    _parseFields(&ctx->fields, in);
-}
-
-str_ostream_t resPrepare(http_response_t *ctx) {
-    str_ostream_t out = ostrInitLen(1024);
-
-    ostrPrintf(
-        &out, "HTTP/%hhu.%hhu %d %s\r\n", 
-        ctx->version.major, ctx->version.minor, 
-        ctx->status_code, httpGetStatusString(ctx->status_code)
-    );
-    for (http_field_t *field = ctx->fields; field != vecEnd(ctx->fields); ++field) {
-        ostrPrintf(&out, "%s: %s\r\n", field->key, field->value);
+    
+    str_t out = {
+        .buf = alloc(arena, char, final_len + 1),
+        .len = final_len
+    };
+    usize cur = 0;
+    // substitute characters
+    for (usize i = 0; i < string.len; ++i) {
+        if (strvContains(chars, string.buf[i])) {
+            fmtBuffer(out.buf + cur, 4, "%%%X", string.buf[i]);
+            cur += 3;
+        }
+        else {
+            out.buf[cur++] = string.buf[i];
+        }
     }
-    ostrPuts(&out, "\r\n");
-    ostrAppendview(&out, strvInitLen(ctx->body, vecLen(ctx->body)));
 
     return out;
 }
 
-str_t resString(http_response_t *ctx) {
-    str_ostream_t out = resPrepare(ctx);
-    return ostrAsStr(out);
+http_url_t httpSplitUrl(strview_t url) {
+    http_url_t out = {0};
+
+    if (strvStartsWithView(url, strv("https://"))) {
+        url = strvRemovePrefix(url, 8);
+    }
+    else if (strvStartsWithView(url, strv("http://"))) {
+        url = strvRemovePrefix(url, 7);
+    }
+
+    out.host = strvSub(url, 0, strvFind(url, '/', 0));
+    out.uri = strvSub(url, out.host.len, SIZE_MAX);
+
+    return out;
 }
 
-// == HTTP CLIENT =============================================================
+http_res_t httpRequest(http_request_desc_t *request) {
+    usize arena_begin = arenaTell(request->arena);
 
-http_client_t hcliInit() {
-    return (http_client_t) {
-        .port = 80,
+    http_req_t req = {
+        .version = (http_version_t){ 1, 1 },
+        .url = request->url,
+        .body = request->body,
+        .method = request->request_type,
     };
-}
 
-void hcliFree(http_client_t ctx) {
-    strFree(ctx.host_name);
-}
+    http_header_t *h = NULL;
 
-void hcliSetHost(http_client_t *ctx, strview_t hostname) {
-    // if the hostname starts with http:// (case insensitive)
-    if(strvICompare(strvSub(hostname, 0, 7), strvInit("http://")) == 0) {
-        ctx->host_name = strvCopy(strvSub(hostname, 7, SIZE_MAX));
-    }
-    else if(strvICompare(strvSub(hostname, 0, 8), strvInit("https://")) == 0) {
-        err("HTTPS protocol not yet supported");
-        return;
-    }
-    else {
-        // undefined protocol, use HTTP
-        ctx->host_name = strvCopy(hostname);
-    }
-}
-
-http_response_t hcliSendRequest(http_client_t *ctx, http_request_t *req) {
-    if (strBack(ctx->host_name) == '/') {
-        ctx->host_name.buf[--ctx->host_name.len] = '\0';
-    }
-    if(!reqHasField(req, "Host")) {
-        reqSetField(req, "Host", ctx->host_name.buf);
-    }
-    if(!reqHasField(req, "Content-Length")) {
-        if(req->body) {
-            str_ostream_t out = ostrInitLen(20);
-            ostrAppendu64(&out, strlen(req->body));
-            reqSetField(req, "Content-Length", out.buf);
-            ostrFree(out);
-        }
-        else {
-            reqSetField(req, "Content-Length", "0");
-        }
-    }
-    if(req->method == REQ_POST && !reqHasField(req, "Content-Type")) {
-        reqSetField(req, "Content-Type", "application/x-www-form-urlencoded");
-    }
-    if(httpVerNumber(req->version) >= 11 && !reqHasField(req, "Connection")) {
-        reqSetField(req, "Connection", "close");
+    for (int i = 0; i < request->header_count; ++i) {
+        http_header_t *header = request->headers + i;
+        header->next = h;
+        h = header;
     }
 
-    http_response_t res = {0};
-    str_t req_str = strInit();
-    str_ostream_t received = ostrInitLen(1024);
-
-    if(!skInit()) {
-        err("couldn't initialize sockets %s", skGetErrorString());
-        goto skopen_error;
+    req.headers = h;
+    
+    http_url_t url = httpSplitUrl(req.url);
+    
+    if (strvEndsWith(url.host, '/')) {
+        url.host = strvRemoveSuffix(url.host, 1);
     }
 
-    ctx->socket = skOpen(SOCK_TCP);
-    if(ctx->socket == INVALID_SOCKET) {
-        err("couldn't open socket %s", skGetErrorString());
+    if (!httpHasHeader(req.headers, strv("Host"))) {
+        httpSetHeader(req.headers, strv("Host"), url.host);
+    }
+    if (!httpHasHeader(req.headers, strv("Content-Length"))) {
+        char tmp[16] = {0};
+        fmtBuffer(tmp, arrlen(tmp), "%zu", req.body.len);
+        httpSetHeader(req.headers, strv("Content-Length"), strv(tmp));
+    }
+    if (req.method == HTTP_POST && !httpHasHeader(req.headers, strv("Content-Type"))) {
+        httpSetHeader(req.headers, strv("Content-Type"), strv("application/x-www-form-urlencoded"));
+    }
+    if (!httpHasHeader(req.headers, strv("Connection"))) {
+        httpSetHeader(req.headers, strv("Connection"), strv("close"));
+    }
+
+    if (!skInit()) {
+        err("couldn't initialise sockets: %s", skGetErrorString());
         goto error;
     }
 
-    if(skConnect(ctx->socket, ctx->host_name.buf, ctx->port)) {
-        req_str = reqString(req);
-        if(req_str.len == 0) {
-            err("couldn't get string from request");
+    socket_t sock = skOpen(SOCK_TCP);
+    if (!skIsValid(sock)) {
+        err("couldn't open socket: %s", skGetErrorString());
+        goto error;
+    }
+
+    char hostname[64] = {0};
+    assert(url.host.len < arrlen(hostname));
+    memcpy(hostname, url.host.buf, url.host.len);
+
+    const int DEFAULT_HTTP_PORT = 80;
+    if (!skConnect(sock, hostname, DEFAULT_HTTP_PORT)) {
+        err("Couldn't connect to host %s: %s", hostname, skGetErrorString());
+        goto error;
+    }
+
+    str_t reqstr = httpReqToStr(request->arena, &req);
+    if (strIsEmpty(reqstr)) {
+        err("couldn't get string from request");
+        goto error;
+    }
+
+    if (skSend(sock, reqstr.buf, (int)reqstr.len) == -1) {
+        err("couldn't send request to socket: %s", skGetErrorString());
+        goto error;
+    }
+
+    outstream_t response = ostrInit(request->arena);
+    char buffer[4096];
+    int read = 0;
+    do {
+        read = skReceive(sock, buffer, arrlen(buffer));
+        if (read == -1) {
+            err("couldn't get the data from the server: %s", skGetErrorString());
             goto error;
         }
+        ostrPuts(&response, strv(buffer, read));
+    } while (read != 0);
 
-        if(skSend(ctx->socket, req_str.buf, (int)req_str.len) == SOCKET_ERROR) {
-            err("couldn't send request to socket: %s", skGetErrorString());
-            goto error;
-        }
-
-        char buffer[1024];
-        int read = 0;
-        do {
-            read = skReceive(ctx->socket, buffer, sizeof(buffer));
-            if(read == -1) {
-                err("couldn't get the data from the server: %s", skGetErrorString());
-                goto error;
-            }
-            ostrAppendview(&received, strvInitLen(buffer, read));
-        } while(read != 0);
-
-        // if the data received is not null terminated
-        if(*(received.buf + received.len) != '\0') {
-            ostrPutc(&received, '\0');
-            received.len--;
-        }
-        
-        res = resParse(received.buf);
-    }
-    else {
-        err("Couldn't connect to host %s -> %s", ctx->host_name, skGetErrorString());
+    if (!skClose(sock)) {
+        err("couldn't close socket: %s", skGetErrorString());
     }
 
-    if(!skClose(ctx->socket)) {
-        err("Couldn't close socket");
+    if (!skCleanup()) {
+        err("couldn't clean up sockets: %s", skGetErrorString());
     }
-    
+
+    return httpParseRes(request->arena, ostrAsView(&response));
+
 error:
-    if(!skCleanup()) {
-        err("couldn't clean up sockets %s", skGetErrorString());
-    }
-skopen_error:
-    strFree(req_str);
-    ostrFree(received);
-    return res;
+    arenaRewind(request->arena, arena_begin);
+    skCleanup();
+    return (http_res_t){0};
 }
 
-http_response_t httpGet(strview_t hostname, strview_t uri) {
-    http_request_t request = reqInit();
-    request.method = REQ_GET;
-    reqSetUri(&request, uri);
+#if COLLA_WIN
 
-    http_client_t client = hcliInit();
-    hcliSetHost(&client, hostname);
-
-    http_response_t res = hcliSendRequest(&client, &request);
-
-    reqFree(request);
-    hcliFree(client);
-
-    return res;
-}
-
-url_split_t urlSplit(strview_t uri) {
-    url_split_t out = {0};
-
-    if (strvStartsWithView(uri, strvInit("https://"))) {
-        uri = strvRemovePrefix(uri, 8);
-    }
-    else if (strvStartsWithView(uri, strvInit("http://"))) {
-        uri = strvRemovePrefix(uri, 7);
+buffer_t httpsRequest(http_request_desc_t *req) {
+    HINTERNET internet = InternetOpen(
+        TEXT("COLLA"), 
+        INTERNET_OPEN_TYPE_PRECONFIG,
+        NULL,
+        NULL,
+        0
+    );
+    if (!internet) {
+        fatal("call to InternetOpen failed: %u", GetLastError());
     }
 
-    out.host = strvSub(uri, 0, strvFind(uri, '/', 0));
-    out.uri = strvSub(uri, out.host.len, SIZE_MAX);
-    return out;
+    http_url_t split = httpSplitUrl(req->url);
+    strview_t server = split.host;
+    strview_t page = split.uri;
+
+    if (strvStartsWithView(server, strv("http://"))) {
+        server = strvRemovePrefix(server, 7);
+    }
+
+    if (strvStartsWithView(server, strv("https://"))) {
+        server = strvRemovePrefix(server, 8);
+    }
+
+    arena_t scratch = *req->arena;
+    const TCHAR *tserver = strvToTChar(&scratch, server);
+    const TCHAR *tpage = strvToTChar(&scratch, page);
+
+    HINTERNET connection = InternetConnect(
+        internet,
+        tserver,
+        INTERNET_DEFAULT_HTTPS_PORT,
+        NULL,
+        NULL,
+        INTERNET_SERVICE_HTTP,
+        0,
+        (DWORD_PTR)NULL // userdata
+    );
+    if (!connection) {
+        fatal("call to InternetConnect failed: %u", GetLastError());
+    }
+
+    const TCHAR *accepted_types[] = { TEXT("*/*"), NULL };
+
+    HINTERNET request = HttpOpenRequest(
+        connection,
+        https__get_method_str(req->request_type),
+        tpage,
+        TEXT("HTTP/1.1"),
+        NULL,
+        accepted_types,
+        INTERNET_FLAG_SECURE,
+        (DWORD_PTR)NULL // userdata
+    );
+    if (!request) {
+        fatal("call to HttpOpenRequest failed: %u", GetLastError());
+    }
+
+    outstream_t header = ostrInit(&scratch);
+
+    for (int i = 0; i < req->header_count; ++i) {
+        http_header_t *h = &req->headers[i];
+        ostrClear(&header);
+        ostrPrintf(
+            &header,
+            "%.*s: %.*s\r\n", 
+            h->key.len, h->key.buf, 
+            h->value.len, h->value.buf
+        );
+        str_t header_str = ostrAsStr(&header);
+        HttpAddRequestHeadersA(
+            request,
+            header_str.buf,
+            header_str.len,
+            0
+        );
+    }
+
+    BOOL request_sent = HttpSendRequest(
+        request,
+        NULL,
+        0,
+        (void *)req->body.buf,
+        req->body.len
+    );
+    if (!request_sent) {
+        fatal("call to HttpSendRequest failed: %u", GetLastError());
+    }
+
+    outstream_t out = ostrInit(req->arena);
+
+    while (true) {
+        DWORD bytes_read = 0;
+        char buffer[4096];
+        BOOL read = InternetReadFile(
+            request,
+            buffer,
+            sizeof(buffer),
+            &bytes_read
+        );
+        if (!read || bytes_read == 0) {
+            break;
+        }
+        ostrPuts(&out, strv(buffer, bytes_read));
+    }
+
+    InternetCloseHandle(request);
+    InternetCloseHandle(connection);
+    InternetCloseHandle(internet);
+
+    str_t outstr = ostrAsStr(&out);
+
+    return (buffer_t) {
+        .data = (uint8 *)outstr.buf,
+        .len = outstr.len
+    };
 }
+
+static const TCHAR *https__get_method_str(http_method_e method) {
+    switch (method) {
+        case HTTP_GET:    return TEXT("GET");
+        case HTTP_POST:   return TEXT("POST");
+        case HTTP_HEAD:   return TEXT("HEAD");
+        case HTTP_PUT:    return TEXT("PUT");
+        case HTTP_DELETE: return TEXT("DELETE");
+    }
+    // default GET
+    return NULL;
+}
+#endif
+
+#include "warnings/colla_warn_end.h"

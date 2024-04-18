@@ -1,119 +1,114 @@
 #include "socket.h"
 
-#include <stdio.h>
-#include "tracelog.h"
-
-#ifndef NDEBUG
-// VERY MUCH NOT THREAD SAFE
-static int initialize_count = 0;
+#if COLLA_WIN && COLLA_CMT_LIB
+#pragma comment(lib, "Ws2_32")
 #endif
 
-#if SOCK_WINDOWS
-static bool _win_skInit();
-static bool _win_skCleanup();
-static int _win_skGetError();
-static const char *_win_skGetErrorString();
+#if COLLA_WIN
+#include <winsock2.h>
 
-#define SOCK_CALL(fun) _win_##fun
+bool skInit(void) {
+    WSADATA w;
+    int error = WSAStartup(0x0202, &w);
+    return error == 0;
+}
 
-#elif SOCK_POSIX
+bool skCleanup(void) {
+    return WSACleanup() == 0;
+}
+
+bool skClose(socket_t sock) {
+    return closesocket(sock) != -1;
+}
+
+int skPoll(skpoll_t *to_poll, int num_to_poll, int timeout) {
+    return WSAPoll(to_poll, num_to_poll, timeout);
+}
+
+int skGetError(void) {
+    return WSAGetLastError();
+}
+
+#else
+
+#include <netinet/in.h> 
+#include <arpa/inet.h>
 #include <netdb.h>
 #include <unistd.h>
 #include <errno.h>
 #include <string.h> // strerror
 #include <poll.h>
 
-#define INVALID_SOCKET (-1)
-#define SOCKET_ERROR   (-1)
-
-static bool _posix_skInit();
-static bool _posix_skCleanup();
-static int _posix_skGetError();
-static const char *_posix_skGetErrorString();
-
-#define SOCK_CALL(fun) _posix_##fun
-
-#endif
-
-bool skInit() {
-#ifndef NDEBUG
-    ++initialize_count;
-#endif
-    return SOCK_CALL(skInit());
+bool skInit(void) {
+    return true;
 }
 
-bool skCleanup() {
-#ifndef NDEBUG
-    --initialize_count;
-#endif
-    return SOCK_CALL(skCleanup());
+bool skCleanup(void) {
+    return true;
 }
 
-socket_t skOpen(sktype_t type) {
+bool skClose(socket_t sock) {
+    return close(sock) != -1;
+}
+
+int skPoll(skpoll_t *to_poll, int num_to_poll, int timeout) {
+    return poll(to_poll, num_to_poll, timeout);
+}
+
+int skGetError(void) {
+    return errno;
+}
+
+const char *skGetErrorString(void) {
+    return strerror(errno);
+}
+
+#endif
+
+socket_t skOpen(sktype_e type) {
     int sock_type = 0;
 
     switch(type) {
-    case SOCK_TCP: sock_type = SOCK_STREAM; break;
-    case SOCK_UDP: sock_type = SOCK_DGRAM;  break;
-    default: fatal("skType not recognized: %d", type); break;
+        case SOCK_TCP: sock_type = SOCK_STREAM; break;
+        case SOCK_UDP: sock_type = SOCK_DGRAM;  break;
+        default: fatal("skType not recognized: %d", type); break;
     }
 
     return skOpenPro(AF_INET, sock_type, 0);
 }
 
 socket_t skOpenEx(const char *protocol) {
-#ifndef NDEBUG
-    if(initialize_count <= 0) {
-        fatal("skInit has not been called");
-    }
-#endif
     struct protoent *proto = getprotobyname(protocol);
     if(!proto) {
-        return INVALID_SOCKET;
+        return (socket_t){0};
     }
     return skOpenPro(AF_INET, SOCK_STREAM, proto->p_proto);
 }
 
 socket_t skOpenPro(int af, int type, int protocol) {
-#ifndef NDEBUG
-    if(initialize_count <= 0) {
-        fatal("skInit has not been called");
-    }
-#endif
     return socket(af, type, protocol);
 }
 
-sk_addrin_t skAddrinInit(const char *ip, uint16_t port) {
-    sk_addrin_t addr;
-    addr.sin_family = AF_INET;
-	addr.sin_port = htons(port);
-	addr.sin_addr.s_addr = inet_addr(ip);
-    return addr;
+bool skIsValid(socket_t sock) {
+    return sock != (socket_t)-1;
 }
 
-bool skClose(socket_t sock) {
-#if SOCK_WINDOWS
-    int error = closesocket(sock);
-#elif SOCK_POSIX
-    int error = close(sock);
-#endif
-    sock = INVALID_SOCKET;
-    return error != SOCKET_ERROR;
+skaddrin_t skAddrinInit(const char *ip, uint16_t port) {
+    return (skaddrin_t){
+        .sin_family = AF_INET,
+        .sin_port = htons(port),
+        // TODO use inet_pton instead
+        .sin_addr.s_addr = inet_addr(ip),
+    };
 }
 
 bool skBind(socket_t sock, const char *ip, uint16_t port) {
-    sk_addrin_t addr;
-    addr.sin_family = AF_INET;
-    // TODO use inet_pton instead
-    addr.sin_addr.s_addr = inet_addr(ip);
-    
-    addr.sin_port = htons(port);
-
-    return skBindPro(sock, (sk_addr_t *) &addr, sizeof(addr));
+    skaddrin_t addr = skAddrinInit(ip, port);
+    return skBindPro(sock, (skaddr_t *)&addr, sizeof(addr));
 }
 
-bool skBindPro(socket_t sock, const sk_addr_t *name, sk_len_t namelen) {
-    return bind(sock, name, namelen) != SOCKET_ERROR;
+bool skBindPro(socket_t sock, const skaddr_t *name, int namelen) {
+    return bind(sock, name, namelen) != -1;
 }
 
 bool skListen(socket_t sock) {
@@ -121,16 +116,16 @@ bool skListen(socket_t sock) {
 }
 
 bool skListenPro(socket_t sock, int backlog) {
-    return listen(sock, backlog) != SOCKET_ERROR;
+    return listen(sock, backlog) != -1;
 }
 
 socket_t skAccept(socket_t sock) {
-    sk_addrin_t addr;
-    sk_len_t addr_size = (sk_len_t)sizeof(addr);
-    return skAcceptPro(sock, (sk_addr_t *) &addr, &addr_size);
+    skaddrin_t addr = {0};
+    int addr_size = sizeof(addr);
+    return skAcceptPro(sock, (skaddr_t *)&addr, &addr_size);
 }
 
-socket_t skAcceptPro(socket_t sock, sk_addr_t *addr, sk_len_t *addrlen) {
+socket_t skAcceptPro(socket_t sock, skaddr_t *addr, int *addrlen) {
     return accept(sock, addr, addrlen);
 }
 
@@ -143,16 +138,13 @@ bool skConnect(socket_t sock, const char *server, unsigned short server_port) {
         address = inet_ntoa(*(struct in_addr*)host->h_addr_list[0]);
     }
     
-    sk_addrin_t addr;
-    addr.sin_family = AF_INET;
-    addr.sin_addr.s_addr = inet_addr(address);
-    addr.sin_port = htons(server_port);
+    skaddrin_t addr = skAddrinInit(address, server_port);
 
-    return skConnectPro(sock, (sk_addr_t *) &addr, sizeof(addr));
+    return skConnectPro(sock, (skaddr_t *)&addr, sizeof(addr));
 }
 
-bool skConnectPro(socket_t sock, const sk_addr_t *name, sk_len_t namelen) {
-    return connect(sock, name, namelen) != SOCKET_ERROR;
+bool skConnectPro(socket_t sock, const skaddr_t *name, int namelen) {
+    return connect(sock, name, namelen) != -1;
 }
 
 int skSend(socket_t sock, const void *buf, int len) {
@@ -163,11 +155,11 @@ int skSendPro(socket_t sock, const void *buf, int len, int flags) {
     return send(sock, buf, len, flags);
 }
 
-int skSendTo(socket_t sock, const void *buf, int len, const sk_addrin_t *to) {
-    return skSendToPro(sock, buf, len, 0, (sk_addr_t*) to, sizeof(sk_addrin_t));
+int skSendTo(socket_t sock, const void *buf, int len, const skaddrin_t *to) {
+    return skSendToPro(sock, buf, len, 0, (skaddr_t*)to, sizeof(skaddrin_t));
 }
 
-int skSendToPro(socket_t sock, const void *buf, int len, int flags, const sk_addr_t *to, int tolen) {
+int skSendToPro(socket_t sock, const void *buf, int len, int flags, const skaddr_t *to, int tolen) {
     return sendto(sock, buf, len, flags, to, tolen);
 }
 
@@ -179,52 +171,19 @@ int skReceivePro(socket_t sock, void *buf, int len, int flags) {
     return recv(sock, buf, len, flags);
 }
 
-int skReceiveFrom(socket_t sock, void *buf, int len, sk_addrin_t *from) {
-    sk_len_t fromlen = sizeof(sk_addr_t);
-    return skReceiveFromPro(sock, buf, len, 0, (sk_addr_t*)from, &fromlen);
+int skReceiveFrom(socket_t sock, void *buf, int len, skaddrin_t *from) {
+    int fromlen = sizeof(skaddr_t);
+    return skReceiveFromPro(sock, buf, len, 0, (skaddr_t*)from, &fromlen);
 }
 
-int skReceiveFromPro(socket_t sock, void *buf, int len, int flags, sk_addr_t *from, sk_len_t *fromlen) {
+int skReceiveFromPro(socket_t sock, void *buf, int len, int flags, skaddr_t *from, int *fromlen) {
     return recvfrom(sock, buf, len, flags, from, fromlen);
 }
 
-int skPoll(skpoll_t *to_poll, int num_to_poll, int timeout) {
-#if SOCK_WINDOWS
-    return WSAPoll(to_poll, num_to_poll, timeout);
-#elif SOCK_POSIX
-    return poll(to_poll, num_to_poll, timeout);
-#endif
-}
-
-bool skIsValid(socket_t sock) {
-    return sock != INVALID_SOCKET;
-}
-
-int skGetError() {
-    return SOCK_CALL(skGetError());
-}
-
-const char *skGetErrorString() {
-    return SOCK_CALL(skGetErrorString());
-}
-
-#ifdef SOCK_WINDOWS
-static bool _win_skInit() {
-    WSADATA w;
-    int error = WSAStartup(0x0202, &w);
-    return error == 0;
-}
-
-static bool _win_skCleanup() {
-    return WSACleanup() == 0;
-}
-
-static int _win_skGetError() {
-    return WSAGetLastError();
-}
-
-static const char *_win_skGetErrorString() {
-    switch(_win_skGetError()) {
+// put this at the end of file to not make everything else unreadable
+#if COLLA_WIN
+const char *skGetErrorString(void) {
+    switch(skGetError()) {
         case WSA_INVALID_HANDLE: return "Specified event object handle is invalid.";
         case WSA_NOT_ENOUGH_MEMORY: return "Insufficient memory available.";
         case WSA_INVALID_PARAMETER: return "One or more parameters are invalid.";
@@ -323,23 +282,5 @@ static const char *_win_skGetErrorString() {
     }
 
     return "(nothing)";
-}
-
-#else
-
-static bool _posix_skInit() {
-    return true;
-}
-
-static bool _posix_skCleanup() {
-    return true;
-}
-
-static int _posix_skGetError() {
-    return errno;
-}
-
-static const char *_posix_skGetErrorString() {
-    return strerror(errno);
 }
 #endif

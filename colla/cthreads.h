@@ -1,11 +1,6 @@
 #pragma once
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-#include <stdbool.h>
-#include <stdint.h>
+#include "collatypes.h"
 
 // == THREAD ===========================================
 
@@ -37,31 +32,6 @@ bool mtxLock(cmutex_t ctx);
 bool mtxTryLock(cmutex_t ctx);
 bool mtxUnlock(cmutex_t ctx);
 
-#ifdef __cplusplus
-// small c++ class to make mutexes easier to use
-struct lock_t {
-    inline lock_t(cmutex_t mutex)
-        : mutex(mutex) {
-        if (mtxValid(mutex)) {
-            mtxLock(mutex);
-        }
-    }
-
-    inline ~lock_t() {
-        unlock();
-    }
-
-    inline void unlock() {
-        if (mtxValid(mutex)) {
-            mtxUnlock(mutex);
-        }
-        mutex = 0;
-    }
-    
-    cmutex_t mutex;
-};
-#endif
-
 // == CONDITION VARIABLE ===============================
 
 typedef uintptr_t condvar_t;
@@ -76,7 +46,3 @@ void condWakeAll(condvar_t cond);
 
 void condWait(condvar_t cond, cmutex_t mtx);
 void condWaitTimed(condvar_t cond, cmutex_t mtx, int milliseconds);
-
-#ifdef __cplusplus
-} // extern "C"
-#endif

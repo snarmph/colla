@@ -1,13 +1,23 @@
 #include "cthreads.h"
 
+#include <stdlib.h>
+
 typedef struct {
     cthread_func_t func;
     void *arg;
 } _thr_internal_t;
 
-#ifdef _WIN32
-#include "win32_slim.h"
-#include <stdlib.h>
+#if COLLA_WIN
+#define WIN32_LEAN_AND_MEAN
+#include <handleapi.h>
+#include <processthreadsapi.h>
+#include <synchapi.h>
+
+#undef INFINITE
+#undef WAIT_FAILED
+// couple of defines to avoid including windows.h
+#define INFINITE            0xFFFFFFFF  // Infinite timeout
+#define WAIT_FAILED         ((DWORD)0xFFFFFFFF)
 
 // == THREAD ===========================================
 
@@ -21,7 +31,7 @@ static DWORD _thrFuncInternal(void *arg) {
 
 cthread_t thrCreate(cthread_func_t func, void *arg) {
     HANDLE thread = INVALID_HANDLE_VALUE;
-    _thr_internal_t *params = malloc(sizeof(_thr_internal_t));
+    _thr_internal_t *params = calloc(1, sizeof(_thr_internal_t));
     
     if(params) {
         params->func = func;
@@ -68,7 +78,7 @@ bool thrJoin(cthread_t ctx, int *code) {
 // == MUTEX ============================================
 
 cmutex_t mtxInit(void) {
-    CRITICAL_SECTION *crit_sec = malloc(sizeof(CRITICAL_SECTION));
+    CRITICAL_SECTION *crit_sec = calloc(1, sizeof(CRITICAL_SECTION));
     if(crit_sec) {
         InitializeCriticalSection(crit_sec);
     }
@@ -100,10 +110,10 @@ bool mtxUnlock(cmutex_t ctx) {
 
 // == CONDITION VARIABLE ===============================
 
-#include <tracelog.h>
+#include "tracelog.h"
 
 condvar_t condInit(void) {
-    CONDITION_VARIABLE *cond = malloc(sizeof(CONDITION_VARIABLE));
+    CONDITION_VARIABLE *cond = calloc(1, sizeof(CONDITION_VARIABLE));
     InitializeConditionVariable(cond);
     return (condvar_t)cond;
 }
@@ -121,7 +131,7 @@ void condWakeAll(condvar_t cond) {
 }
 
 void condWait(condvar_t cond, cmutex_t mtx) {
-    BOOL res = SleepConditionVariableCS((CONDITION_VARIABLE *)cond, (CRITICAL_SECTION *)mtx, INFINITE);
+    SleepConditionVariableCS((CONDITION_VARIABLE *)cond, (CRITICAL_SECTION *)mtx, INFINITE);
 }
 
 void condWaitTimed(condvar_t cond, cmutex_t mtx, int milliseconds) {
@@ -130,7 +140,6 @@ void condWaitTimed(condvar_t cond, cmutex_t mtx, int milliseconds) {
 
 #else
 #include <pthread.h>
-#include <stdlib.h>
 #include <unistd.h>
 #include <sys/syscall.h>
 #include <sys/types.h>
@@ -150,7 +159,7 @@ static void *_thrFuncInternal(void *arg) {
 cthread_t thrCreate(cthread_func_t func, void *arg) {
     pthread_t handle = (pthread_t)NULL;
 
-    _thr_internal_t *params = malloc(sizeof(_thr_internal_t));
+    _thr_internal_t *params = calloc(1, sizeof(_thr_internal_t));
     
     if(params) {
         params->func = func;
@@ -195,7 +204,7 @@ bool thrJoin(cthread_t ctx, int *code) {
 // == MUTEX ============================================
 
 cmutex_t mtxInit(void) {
-    pthread_mutex_t *mutex = malloc(sizeof(pthread_mutex_t));
+    pthread_mutex_t *mutex = calloc(1, sizeof(pthread_mutex_t));
 
     if(mutex) {
         if(pthread_mutex_init(mutex, NULL)) {
@@ -230,7 +239,7 @@ bool mtxUnlock(cmutex_t ctx) {
 // == CONDITION VARIABLE ===============================
 
 condvar_t condInit(void) {
-    pthread_cond_t *cond = malloc(sizeof(pthread_cond_t));
+    pthread_cond_t *cond = calloc(1, sizeof(pthread_cond_t));
 
     if(cond) {
         if(pthread_cond_init(cond, NULL)) {

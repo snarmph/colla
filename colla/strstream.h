@@ -4,12 +4,12 @@
 extern "C" {
 #endif
 
-#include <stdbool.h>
-#include <stddef.h>
 #include <stdarg.h>
 
 #include "collatypes.h"
 #include "str.h"
+
+typedef struct arena_t arena_t;
 
 /* == INPUT STREAM ============================================ */
 
@@ -17,97 +17,84 @@ typedef struct {
     const char *start;
     const char *cur;
     usize size;
-} str_istream_t;
+} instream_t;
 
 // initialize with null-terminated string
-str_istream_t istrInit(const char *str);
-str_istream_t istrInitLen(const char *str, usize len);
+instream_t istrInit(const char *str);
+instream_t istrInitLen(const char *str, usize len);
 
 // get the current character and advance
-char istrGet(str_istream_t *ctx);
+char istrGet(instream_t *ctx);
 // get the current character but don't advance
-char istrPeek(str_istream_t *ctx);
+char istrPeek(instream_t *ctx);
+// get the next character but don't advance
+char istrPeekNext(instream_t *ctx);
 // ignore characters until the delimiter
-void istrIgnore(str_istream_t *ctx, char delim);
+void istrIgnore(instream_t *ctx, char delim);
 // ignore characters until the delimiter and skip it
-void istrIgnoreAndSkip(str_istream_t *ctx, char delim);
+void istrIgnoreAndSkip(instream_t *ctx, char delim);
 // skip n characters
-void istrSkip(str_istream_t *ctx, usize n);
+void istrSkip(instream_t *ctx, usize n);
 // skips whitespace (' ', '\n', '\t', '\r')
-void istrSkipWhitespace(str_istream_t *ctx);
+void istrSkipWhitespace(instream_t *ctx);
 // read len bytes into buffer, the buffer will not be null terminated
-void istrRead(str_istream_t *ctx, char *buf, usize len);
+void istrRead(instream_t *ctx, char *buf, usize len);
 // read a maximum of len bytes into buffer, the buffer will not be null terminated
 // returns the number of bytes read
-usize istrReadMax(str_istream_t *ctx, char *buf, usize len);
+usize istrReadMax(instream_t *ctx, char *buf, usize len);
 // returns to the beginning of the stream
-void istrRewind(str_istream_t *ctx);
+void istrRewind(instream_t *ctx);
 // returns back <amount> characters
-void istrRewindN(str_istream_t *ctx, usize amount);
+void istrRewindN(instream_t *ctx, usize amount);
 // returns the number of bytes read from beginning of stream
-usize istrTell(str_istream_t ctx);
+usize istrTell(instream_t ctx);
 // returns the number of bytes left to read in the stream
-usize istrRemaining(str_istream_t ctx); 
+usize istrRemaining(instream_t ctx); 
 // return true if the stream doesn't have any new bytes to read
-bool istrIsFinished(str_istream_t ctx);
+bool istrIsFinished(instream_t ctx);
 
-bool istrGetbool(str_istream_t *ctx, bool *val);
-bool istrGetu8(str_istream_t *ctx, uint8 *val);
-bool istrGetu16(str_istream_t *ctx, uint16 *val);
-bool istrGetu32(str_istream_t *ctx, uint32 *val);
-bool istrGetu64(str_istream_t *ctx, uint64 *val);
-bool istrGeti8(str_istream_t *ctx, int8 *val);
-bool istrGeti16(str_istream_t *ctx, int16 *val);
-bool istrGeti32(str_istream_t *ctx, int32 *val);
-bool istrGeti64(str_istream_t *ctx, int64 *val);
-bool istrGetfloat(str_istream_t *ctx, float *val);
-bool istrGetdouble(str_istream_t *ctx, double *val);
-// get a string until a delimiter, the string is allocated by the function and should be freed
-usize istrGetstring(str_istream_t *ctx, char **val, char delim);
+bool istrGetBool(instream_t *ctx, bool *val);
+bool istrGetU8(instream_t *ctx, uint8 *val);
+bool istrGetU16(instream_t *ctx, uint16 *val);
+bool istrGetU32(instream_t *ctx, uint32 *val);
+bool istrGetU64(instream_t *ctx, uint64 *val);
+bool istrGetI8(instream_t *ctx, int8 *val);
+bool istrGetI16(instream_t *ctx, int16 *val);
+bool istrGetI32(instream_t *ctx, int32 *val);
+bool istrGetI64(instream_t *ctx, int64 *val);
+bool istrGetFloat(instream_t *ctx, float *val);
+bool istrGetDouble(instream_t *ctx, double *val);
+str_t istrGetStr(arena_t *arena, instream_t *ctx, char delim);
 // get a string of maximum size len, the string is not allocated by the function and will be null terminated
-usize istrGetstringBuf(str_istream_t *ctx, char *val, usize len);
-strview_t istrGetview(str_istream_t *ctx, char delim);
-strview_t istrGetviewLen(str_istream_t *ctx, usize from, usize to);
+usize istrGetBuf(instream_t *ctx, char *buf, usize buflen);
+strview_t istrGetView(instream_t *ctx, char delim);
+strview_t istrGetViewLen(instream_t *ctx, usize len);
 
 /* == OUTPUT STREAM =========================================== */
 
 typedef struct {
-    char *buf;
-    usize len;
-    usize cap;
-} str_ostream_t;
+    char *beg;
+    arena_t *arena;
+} outstream_t;
 
-str_ostream_t ostrInit(void);
-str_ostream_t ostrInitLen(usize initial_alloc);
-str_ostream_t ostrInitStr(const char *buf, usize len);
+outstream_t ostrInit(arena_t *exclusive_arena);
+void ostrClear(outstream_t *ctx);
 
-void ostrFree(str_ostream_t ctx);
-void ostrClear(str_ostream_t *ctx);
+usize ostrTell(outstream_t *ctx);
 
-char ostrBack(str_ostream_t ctx);
-str_t ostrAsStr(str_ostream_t ctx);
-strview_t ostrAsView(str_ostream_t ctx);
+char ostrBack(outstream_t *ctx);
+str_t ostrAsStr(outstream_t *ctx);
+strview_t ostrAsView(outstream_t *ctx);
 
-void ostrReplace(str_ostream_t *ctx, char from, char to);
+void ostrPrintf(outstream_t *ctx, const char *fmt, ...);
+void ostrPrintfV(outstream_t *ctx, const char *fmt, va_list args);
+void ostrPutc(outstream_t *ctx, char c);
+void ostrPuts(outstream_t *ctx, strview_t v);
 
-void ostrPrintf(str_ostream_t *ctx, const char *fmt, ...);
-void ostrPrintfV(str_ostream_t *ctx, const char *fmt, va_list args);
-void ostrPutc(str_ostream_t *ctx, char c);
-void ostrPuts(str_ostream_t *ctx, const char *str);
-
-void ostrAppendbool(str_ostream_t *ctx, bool val);
-void ostrAppendchar(str_ostream_t *ctx, char val);
-void ostrAppendu8(str_ostream_t *ctx, uint8 val);
-void ostrAppendu16(str_ostream_t *ctx, uint16 val);
-void ostrAppendu32(str_ostream_t *ctx, uint32 val);
-void ostrAppendu64(str_ostream_t *ctx, uint64 val);
-void ostrAppendi8(str_ostream_t *ctx, int8 val);
-void ostrAppendi16(str_ostream_t *ctx, int16 val);
-void ostrAppendi32(str_ostream_t *ctx, int32 val);
-void ostrAppendi64(str_ostream_t *ctx, int64 val);
-void ostrAppendfloat(str_ostream_t *ctx, float val);
-void ostrAppenddouble(str_ostream_t *ctx, double val);
-void ostrAppendview(str_ostream_t *ctx, strview_t view);
+void ostrAppendBool(outstream_t *ctx, bool val);
+void ostrAppendUInt(outstream_t *ctx, uint64 val);
+void ostrAppendInt(outstream_t *ctx, int64 val);
+void ostrAppendNum(outstream_t *ctx, double val);
 
 #ifdef __cplusplus
 } // extern "C"

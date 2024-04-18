@@ -12,7 +12,7 @@ extern "C" {
  * -> TLOG_MUTEX:               use a mutex on every traceLog call
 */
 
-#include <stdbool.h>
+#include "collatypes.h"
 #include <stdarg.h>
 
 enum {

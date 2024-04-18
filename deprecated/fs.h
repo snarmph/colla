@@ -4,8 +4,7 @@
 extern "C" {
 #endif
 
-#include <stdint.h>
-#include <stdbool.h>
+#include "collatypes.h"
 
 #include "file.h"
 

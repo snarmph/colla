@@ -4,7 +4,7 @@
 #include <stdlib.h>
 #include <ctype.h>
 
-#ifdef _WIN32
+#if COLLA_WIN
 #define _BUFSZ 128
 
 #include <lmcons.h>

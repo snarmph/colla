@@ -4,8 +4,8 @@
 extern "C" {
 #endif
 
-#include <stdbool.h>  // bool
 #include <string.h>   // memset
+#include "collatypes.h"
 #include "tracelog.h" // fatal
 
 // heavily inspired by https://gist.github.com/Enichan/5f01140530ff0133fde19c9549a2a973

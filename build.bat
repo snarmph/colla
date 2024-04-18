@@ -1,0 +1,1 @@
+zig cc -o test.exe main.c -lWs2_32 -lWininet -Wall -Wpedantic -Wno-newline-eof

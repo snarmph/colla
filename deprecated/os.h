@@ -9,7 +9,7 @@ extern "C" {
 #include "str.h"
 #include "collatypes.h"
 
-#ifdef _WIN32
+#if COLLA_WIN
     #include <stdio.h>
     #include "win32_slim.h"
     isize getdelim(char **buf, size_t *bufsz, int delimiter, FILE *fp);
