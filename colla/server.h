@@ -26,7 +26,6 @@ typedef struct {
 
 typedef str_t (*server_route_f)(arena_t scratch, server_t *server, server_req_t *req, void *userdata);
 
-
 server_t *serverSetup(arena_t *arena, uint16 port);
 void serverRoute(arena_t *arena, server_t *server, strview_t page, server_route_f cb, void *userdata);
 void serverRouteDefault(arena_t *arena, server_t *server, server_route_f cb, void *userdata);
@@ -34,3 +33,5 @@ void serverStart(arena_t scratch, server_t *server);
 void serverStop(server_t *server);
 
 str_t serverMakeResponse(arena_t *arena, int status_code, strview_t content_type, strview_t body);
+socket_t serverGetClient(server_t *server);
+void serverSetClient(server_t *server, socket_t client);

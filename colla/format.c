@@ -8,6 +8,7 @@
 #include "arena.h"
 
 static char *fmt__stb_callback(const char *buf, void *ud, int len) {
+    (void)len;
     printf("%s", buf);
     return (char *)ud;
 }
@@ -21,7 +22,7 @@ int fmtPrint(const char *fmt, ...) {
 }
 
 int fmtPrintv(const char *fmt, va_list args) {
-    char buffer[STB_SPRINTF_MIN];
+    char buffer[STB_SPRINTF_MIN] = {0};
     return stb_vsprintfcb(fmt__stb_callback, buffer, buffer, fmt, args);
 }
 

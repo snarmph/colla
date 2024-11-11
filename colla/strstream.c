@@ -33,19 +33,13 @@ instream_t istrInitLen(const char *str, usize len) {
 }
 
 char istrGet(instream_t *ctx) {
-    return *ctx->cur++;
+    return ctx && ctx->cur ? *ctx->cur++ : '\0';
 }
 
 void istrIgnore(instream_t *ctx, char delim) {
     for (; !istrIsFinished(*ctx) && *ctx->cur != delim; ++ctx->cur) {
 
     }
-
-    //usize position = ctx->cur - ctx->start;
-    //usize i;
-    //for(i = position;
-    //    i < ctx->size && *ctx->cur != delim; 
-    //    ++i, ++ctx->cur);
 }
 
 void istrIgnoreAndSkip(instream_t *ctx, char delim) {
@@ -54,30 +48,33 @@ void istrIgnoreAndSkip(instream_t *ctx, char delim) {
 }
 
 char istrPeek(instream_t *ctx) {
-    return *ctx->cur;
+    return ctx && ctx->cur ? *ctx->cur : '\0';
 }
 
 char istrPeekNext(instream_t *ctx) {
+    if (!ctx || !ctx->cur) return '\0';
     usize offset = (ctx->cur - ctx->start) + 1;
     return offset > ctx->size ? '\0' : *(ctx->cur + 1);
 }
 
 void istrSkip(instream_t *ctx, usize n) {
+    if (!ctx || !ctx->cur) return;
     usize remaining = ctx->size - (ctx->cur - ctx->start);
     if(n > remaining) {
-        warn("skipping more then remaining: %zu -> %zu", n, remaining);
         return;
     }
     ctx->cur += n;
 }
 
 void istrSkipWhitespace(instream_t *ctx) {
+    if (!ctx || !ctx->cur) return;
     while (*ctx->cur && isspace(*ctx->cur)) {
         ++ctx->cur;
     }
 }
 
 void istrRead(instream_t *ctx, char *buf, usize len) {
+    if (!ctx || !ctx->cur) return;
     usize remaining = ctx->size - (ctx->cur - ctx->start);
     if(len > remaining) {
         warn("istrRead: trying to read len %zu from remaining %zu", len, remaining);
@@ -88,6 +85,7 @@ void istrRead(instream_t *ctx, char *buf, usize len) {
 }
 
 usize istrReadMax(instream_t *ctx, char *buf, usize len) {
+    if (!ctx || !ctx->cur) return 0;
     usize remaining = ctx->size - (ctx->cur - ctx->start);
     len = remaining < len ? remaining : len;
     memcpy(buf, ctx->cur, len);
@@ -100,24 +98,26 @@ void istrRewind(instream_t *ctx) {
 }
 
 void istrRewindN(instream_t *ctx, usize amount) {
+    if (!ctx || !ctx->cur) return;
     usize remaining = ctx->size - (ctx->cur - ctx->start);
     if (amount > remaining) amount = remaining;
     ctx->cur -= amount;
 }
 
 usize istrTell(instream_t ctx) {
-    return ctx.cur - ctx.start;
+    return ctx.cur ? ctx.cur - ctx.start : 0;
 }
 
 usize istrRemaining(instream_t ctx) {
-    return ctx.size - (ctx.cur - ctx.start);
+    return ctx.cur ? ctx.size - (ctx.cur - ctx.start) : 0;
 }
 
 bool istrIsFinished(instream_t ctx) {
-    return (usize)(ctx.cur - ctx.start) >= ctx.size;
+    return ctx.cur ? (usize)(ctx.cur - ctx.start) >= ctx.size : true;
 }
 
 bool istrGetBool(instream_t *ctx, bool *val) {
+    if (!ctx || !ctx->cur) return false;
     usize remaining = ctx->size - (ctx->cur - ctx->start);
     if(strncmp(ctx->cur, "true", remaining) == 0) {
         *val = true;
@@ -131,6 +131,7 @@ bool istrGetBool(instream_t *ctx, bool *val) {
 }
 
 bool istrGetU8(instream_t *ctx, uint8 *val) {
+    if (!ctx || !ctx->cur) return false;
     char *end = NULL;
     *val = (uint8) strtoul(ctx->cur, &end, 0);
     
@@ -148,6 +149,7 @@ bool istrGetU8(instream_t *ctx, uint8 *val) {
 }
 
 bool istrGetU16(instream_t *ctx, uint16 *val) {
+    if (!ctx || !ctx->cur) return false;
     char *end = NULL;
     *val = (uint16) strtoul(ctx->cur, &end, 0);
     
@@ -165,6 +167,7 @@ bool istrGetU16(instream_t *ctx, uint16 *val) {
 }
 
 bool istrGetU32(instream_t *ctx, uint32 *val) {
+    if (!ctx || !ctx->cur) return false;
     char *end = NULL;
     *val = (uint32) strtoul(ctx->cur, &end, 0);
     
@@ -182,6 +185,7 @@ bool istrGetU32(instream_t *ctx, uint32 *val) {
 }
 
 bool istrGetU64(instream_t *ctx, uint64 *val) {
+    if (!ctx || !ctx->cur) return false;
     char *end = NULL;
     *val = strtoull(ctx->cur, &end, 0);
     
@@ -199,6 +203,7 @@ bool istrGetU64(instream_t *ctx, uint64 *val) {
 }
 
 bool istrGetI8(instream_t *ctx, int8 *val) {
+    if (!ctx || !ctx->cur) return false;
     char *end = NULL;
     *val = (int8) strtol(ctx->cur, &end, 0);
     
@@ -216,6 +221,7 @@ bool istrGetI8(instream_t *ctx, int8 *val) {
 }
 
 bool istrGetI16(instream_t *ctx, int16 *val) {
+    if (!ctx || !ctx->cur) return false;
     char *end = NULL;
     *val = (int16) strtol(ctx->cur, &end, 0);
     
@@ -233,6 +239,7 @@ bool istrGetI16(instream_t *ctx, int16 *val) {
 }
 
 bool istrGetI32(instream_t *ctx, int32 *val) {
+    if (!ctx || !ctx->cur) return false;
     char *end = NULL;
     *val = (int32) strtol(ctx->cur, &end, 0);
     
@@ -250,6 +257,7 @@ bool istrGetI32(instream_t *ctx, int32 *val) {
 }
 
 bool istrGetI64(instream_t *ctx, int64 *val) {
+    if (!ctx || !ctx->cur) return false;
     char *end = NULL;
     *val = strtoll(ctx->cur, &end, 0);
     
@@ -267,6 +275,7 @@ bool istrGetI64(instream_t *ctx, int64 *val) {
 }
 
 bool istrGetFloat(instream_t *ctx, float *val) {
+    if (!ctx || !ctx->cur) return false;
     char *end = NULL;
     *val = strtof(ctx->cur, &end);
     
@@ -284,6 +293,7 @@ bool istrGetFloat(instream_t *ctx, float *val) {
 }
 
 bool istrGetDouble(instream_t *ctx, double *val) {
+    if (!ctx || !ctx->cur) return false;
     char *end = NULL;
     *val = strtod(ctx->cur, &end);
     
@@ -301,6 +311,7 @@ bool istrGetDouble(instream_t *ctx, double *val) {
 }
 
 str_t istrGetStr(arena_t *arena, instream_t *ctx, char delim) {
+    if (!ctx || !ctx->cur) return (str_t){0};
     const char *from = ctx->cur;
     istrIgnore(ctx, delim);
     // if it didn't actually find it, it just reached the end of the string
@@ -317,6 +328,7 @@ str_t istrGetStr(arena_t *arena, instream_t *ctx, char delim) {
 }
 
 usize istrGetBuf(instream_t *ctx, char *buf, usize buflen) {
+    if (!ctx || !ctx->cur) return 0;
     usize remaining = ctx->size - (ctx->cur - ctx->start);
     buflen -= 1;
     buflen = remaining < buflen ? remaining : buflen;
@@ -327,13 +339,25 @@ usize istrGetBuf(instream_t *ctx, char *buf, usize buflen) {
 }
 
 strview_t istrGetView(instream_t *ctx, char delim) {
+    if (!ctx || !ctx->cur) return (strview_t){0};
     const char *from = ctx->cur;
     istrIgnore(ctx, delim);
     usize len = ctx->cur - from;
     return strvInitLen(from, len);
 }
 
+strview_t istrGetViewEither(instream_t *ctx, strview_t chars) {
+    if (!ctx || !ctx->cur) return (strview_t){0};
+    const char *from = ctx->cur;
+    for (; !istrIsFinished(*ctx) && !strvContains(chars, *ctx->cur); ++ctx->cur) {
+
+    }
+    usize len = ctx->cur - from;
+    return strvInitLen(from, len);
+}
+
 strview_t istrGetViewLen(instream_t *ctx, usize len) {
+    if (!ctx || !ctx->cur) return (strview_t){0};
     const char *from = ctx->cur;
     istrSkip(ctx, len);
     usize buflen = ctx->cur - from;
@@ -343,7 +367,8 @@ strview_t istrGetViewLen(instream_t *ctx, usize len) {
 /* == OUTPUT STREAM =========================================== */
 
 void ostr__remove_null(outstream_t *o) {
-    if (ostrTell(o)) {
+    usize len = ostrTell(o);
+    if (len && o->beg[len - 1] == '\0') {
         arenaPop(o->arena, 1);
     }
 }
@@ -364,20 +389,23 @@ usize ostrTell(outstream_t *ctx) {
 }
 
 char ostrBack(outstream_t *ctx) {
-    return arenaTell(ctx->arena) ? *ctx->arena->current : '\0';
+    usize len = ostrTell(ctx);
+    return len ? ctx->beg[len - 1] : '\0';
 }
 
 str_t ostrAsStr(outstream_t *ctx) {
+    bool is_null_terminated = ostrBack(ctx) == '\0' && false;
     return (str_t){
         .buf = ctx->beg,
-        .len = ostrTell(ctx)
+        .len = ostrTell(ctx) - is_null_terminated
     };
 }
 
 strview_t ostrAsView(outstream_t *ctx) {
+    bool is_null_terminated = ostrBack(ctx) == '\0';
     return (strview_t){
         .buf = ctx->beg,
-        .len = ostrTell(ctx)
+        .len = ostrTell(ctx) - is_null_terminated
     };
 }
 
@@ -392,6 +420,8 @@ void ostrPrintfV(outstream_t *ctx, const char *fmt, va_list args) {
     if (!ctx->arena) return;
     ostr__remove_null(ctx);
     strFmtv(ctx->arena, fmt, args);
+    // remove null termination
+    arenaPop(ctx->arena, 1);
 }
 
 void ostrPutc(outstream_t *ctx, char c) {
@@ -421,6 +451,179 @@ void ostrAppendInt(outstream_t *ctx, int64 val) {
 
 void ostrAppendNum(outstream_t *ctx, double val) {
     ostrPrintf(ctx, "%g", val);
+}
+
+/* == OUT BYTE STREAM ========================================= */
+
+obytestream_t obstrInit(arena_t *exclusive_arena) {
+    return (obytestream_t){
+        .beg = exclusive_arena ? exclusive_arena->current : NULL,
+        .arena = exclusive_arena,
+    };
+}
+
+void obstrClear(obytestream_t *ctx) {
+    if (ctx->arena) {
+        ctx->arena->current = ctx->beg;
+    }
+}
+
+usize obstrTell(obytestream_t *ctx) {
+    return ctx->arena ? ctx->arena->current - ctx->beg : 0;
+}
+
+buffer_t obstrAsBuf(obytestream_t *ctx) {
+    return (buffer_t){ .data = ctx->beg, .len = obstrTell(ctx) };
+}
+
+void obstrWrite(obytestream_t *ctx, const void *buf, usize buflen) {
+    uint8 *dst = alloc(ctx->arena, uint8, buflen);
+    memcpy(dst, buf, buflen);
+}
+
+void obstrPuts(obytestream_t *ctx, strview_t str) {
+    obstrWrite(ctx, str.buf, str.len);
+}
+
+void obstrAppendU8(obytestream_t *ctx, uint8 value) { 
+    obstrWrite(ctx, &value, sizeof(value)); 
+}
+
+void obstrAppendU16(obytestream_t *ctx, uint16 value) { 
+    obstrWrite(ctx, &value, sizeof(value)); 
+}
+
+void obstrAppendU32(obytestream_t *ctx, uint32 value) { 
+    obstrWrite(ctx, &value, sizeof(value)); 
+}
+
+void obstrAppendU64(obytestream_t *ctx, uint64 value) { 
+    obstrWrite(ctx, &value, sizeof(value)); 
+}
+
+void obstrAppendI8(obytestream_t *ctx, int8 value) { 
+    obstrWrite(ctx, &value, sizeof(value)); 
+}
+
+void obstrAppendI16(obytestream_t *ctx, int16 value) { 
+    obstrWrite(ctx, &value, sizeof(value)); 
+}
+
+void obstrAppendI32(obytestream_t *ctx, int32 value) { 
+    obstrWrite(ctx, &value, sizeof(value)); 
+}
+
+void obstrAppendI64(obytestream_t *ctx, int64 value) { 
+    obstrWrite(ctx, &value, sizeof(value)); 
+}
+
+/* == IN BYTE STREAM ========================================== */
+
+ibytestream_t ibstrInit(const void *buf, usize len) {
+    return (ibytestream_t) {
+        .cur = buf,
+        .start = buf,
+        .size = len,
+    };
+}
+
+usize ibstrRemaining(ibytestream_t *ctx) {
+    return ctx->size - (ctx->cur - ctx->start);
+}
+
+usize ibstrTell(ibytestream_t *ctx) {
+    return ctx->cur ? ctx->cur - ctx->start : 0;
+}
+
+usize ibstrRead(ibytestream_t *ctx, void *buf, usize buflen) {
+    if (!ctx->cur) return 0;
+    usize remaining = ibstrRemaining(ctx);
+    if (buflen > remaining) buflen = remaining;
+    memcpy(buf, ctx->cur, buflen);
+    ctx->cur += buflen;
+    return buflen;
+}
+
+uint8 ibstrGetU8(ibytestream_t *ctx) { 
+    uint8 value = 0;
+    usize read = ibstrRead(ctx, &value, sizeof(value));
+    return read == sizeof(value) ? value : 0;
+}
+
+uint16 ibstrGetU16(ibytestream_t *ctx) { 
+    uint16 value = 0;
+    usize read = ibstrRead(ctx, &value, sizeof(value));
+    return read == sizeof(value) ? value : 0;
+}
+
+uint32 ibstrGetU32(ibytestream_t *ctx) { 
+    uint32 value = 0;
+    usize read = ibstrRead(ctx, &value, sizeof(value));
+    return read == sizeof(value) ? value : 0;
+}
+
+uint64 ibstrGetU64(ibytestream_t *ctx) { 
+    uint64 value = 0;
+    usize read = ibstrRead(ctx, &value, sizeof(value));
+    return read == sizeof(value) ? value : 0;
+}
+
+int8 ibstrGetI8(ibytestream_t *ctx) { 
+    int8 value = 0;
+    usize read = ibstrRead(ctx, &value, sizeof(value));
+    return read == sizeof(value) ? value : 0;
+}
+
+int16 ibstrGetI16(ibytestream_t *ctx) { 
+    int16 value = 0;
+    usize read = ibstrRead(ctx, &value, sizeof(value));
+    return read == sizeof(value) ? value : 0;
+}
+
+int32 ibstrGetI32(ibytestream_t *ctx) { 
+    int32 value = 0;
+    usize read = ibstrRead(ctx, &value, sizeof(value));
+    return read == sizeof(value) ? value : 0;
+}
+
+int64 ibstrGetI64(ibytestream_t *ctx) { 
+    int64 value = 0;
+    usize read = ibstrRead(ctx, &value, sizeof(value));
+    return read == sizeof(value) ? value : 0;
+}
+
+float ibstrGetFloat(ibytestream_t *ctx) { 
+    float value = 0;
+    usize read = ibstrRead(ctx, &value, sizeof(value));
+    return read == sizeof(value) ? value : 0;
+}
+
+double ibstrGetDouble(ibytestream_t *ctx) { 
+    double value = 0;
+    usize read = ibstrRead(ctx, &value, sizeof(value));
+    return read == sizeof(value) ? value : 0;
+}
+
+strview_t ibstrGetView(ibytestream_t *ctx, usize lensize) {
+    uint64 len = 0;
+    usize read = ibstrRead(ctx, &len, lensize);
+    if (read != lensize) {
+        warn("couldn't read %zu bytes, instead read %zu for string", lensize, read);
+        return (strview_t){0};
+    }
+    usize remaining = ibstrRemaining(ctx);
+    if (len > remaining) {
+        warn("trying to read a string of length %zu, but only %zu bytes remaining", len, remaining);
+        len = remaining;
+    }
+    
+    const char *str = (const char *)ctx->cur;
+    ctx->cur += len;
+    
+    return (strview_t){
+        .buf = str,
+        .len = len,
+    };
 }
 
 #include "warnings/colla_warn_end.h"

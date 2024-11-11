@@ -2,16 +2,22 @@
 
 #include "collatypes.h"
 
-#if COLLA_WIN
+#if COLLA_TCC
+#include "tcc/colla_tcc.h"
+#elif COLLA_WIN
+#define _WINSOCK_DEPRECATED_NO_WARNINGS
 #include <winsock2.h>
-#else
+#elif COLLA_LIN || COLLA_OSX
 #include <sys/socket.h> 
+#include <netinet/in.h> 
 #endif
 
 typedef uintptr_t socket_t;
 typedef struct sockaddr skaddr_t;
 typedef struct sockaddr_in skaddrin_t;
 typedef struct pollfd skpoll_t;
+
+#define SOCKET_ERROR (-1)
 
 typedef enum {
     SOCK_TCP,

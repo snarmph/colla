@@ -44,7 +44,10 @@ void arenaCleanup(arena_t *arena) {
         case ARENA_STATIC:  break;
     }
 
-    memset(arena, 0, sizeof(arena_t));
+    arena->start = NULL;
+    arena->current = NULL;
+    arena->end = NULL;
+    arena->type = 0;
 }
 
 arena_t arenaScratch(arena_t *arena) {
@@ -103,12 +106,6 @@ void *arenaAlloc(const arena_alloc_desc_t *desc) {
 
     byte *ptr = arena->current;
     arena->current += total;
-
-    if (desc->flags & ALLOC_NOZERO) return ptr;
-
-    memset(ptr, 0, total);
-
-    return ptr;
 
     return desc->flags & ALLOC_NOZERO ? ptr : memset(ptr, 0, total);
 }

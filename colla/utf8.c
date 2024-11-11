@@ -9,7 +9,7 @@ static const uint8 masks[] = {
     0x01  // 0000-0001
 };
 
-struct {
+static struct {
     uint8 mask;
     uint8 result;
     int octets;

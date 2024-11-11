@@ -1,17 +1,43 @@
-// remember to link Ws2_32 (sockets, server, http) and Wininet (https) if you want to do networking stuff!
+#if COLLA_ONLYCORE
+    #define COLLA_NOTHREADS 1
+    #define COLLA_NOSOCKETS 1
+    #define COLLA_NOHTTP    1
+    #define COLLA_NOSERVER  1
+#endif
 
-#include "colla/arena.c"
-#include "colla/base64.c"
-#include "colla/cthreads.c"
-#include "colla/file.c"
-#include "colla/format.c"
-#include "colla/http.c"
-#include "colla/ini.c"
-#include "colla/json.c"
-#include "colla/server.c"
-#include "colla/socket.c"
-#include "colla/str.c"
-#include "colla/strstream.c"
-#include "colla/tracelog.c"
-#include "colla/utf8.c"
-#include "colla/vmem.c"
+#if COLLA_NOSOCKETS
+    #undef COLLA_NOHTTP
+    #undef COLLA_NOSERVER
+    #define COLLA_NOHTTP    1
+    #define COLLA_NOSERVER  1
+#endif
+
+#include "src/arena.c"
+#include "src/base64.c"
+#include "src/file.c"
+#include "src/format.c"
+#include "src/ini.c"
+#include "src/json.c"
+#include "src/str.c"
+#include "src/strstream.c"
+#include "src/tracelog.c"
+#include "src/utf8.c"
+#include "src/vmem.c"
+#include "src/xml.c"
+#include "src/hot_reload.c"
+
+#if !COLLA_NOTHREADS
+#include "src/cthreads.c"
+#endif
+
+#if !COLLA_NOSOCKETS
+#include "src/socket.c"
+#endif
+
+#if !COLLA_NOHTTP
+#include "src/http.c"
+#endif
+
+#if !COLLA_NOSERVER 
+#include "src/server.c"
+#endif

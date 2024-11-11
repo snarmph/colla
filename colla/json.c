@@ -5,40 +5,27 @@
 #include <stdio.h>
 
 #include "strstream.h"
+#include "file.h"
 #include "tracelog.h"
 
-#define json__ensure(c) \
-    if (istrGet(in) != (c)) { \
-        istrRewindN(in, 1); \
-        fatal("wrong character at %zu, should be " #c " but is %c", istrTell(*in), istrPeek(in));\
+// #define json__logv() warn("%s:%d", __FILE__, __LINE__)
+#define json__logv() 
+#define json__ensure(c) json__check_char(in, c)
+
+static bool json__check_char(instream_t *in, char c) {
+    if (istrGet(in) == c) {
+        return true;
     }
-
-str_t json__read_whole(arena_t *arena, const char *filename) {
-    str_t out = {0};
-    FILE *fp = fopen(filename, "rb");
-    if (!fp) {
-        err("could not open %s", filename);
-        return (str_t){0};
-    }
-
-    fseek(fp, 0, SEEK_END);
-    long len = ftell(fp);
-    fseek(fp, 0, SEEK_SET);
-
-    out.buf = alloc(arena, char, len + 1);
-    out.len = len;
-
-    fread(out.buf, 1, len, fp);
-
-    fclose(fp);
-
-    return out;
+    istrRewindN(in, 1);
+    err("wrong character at %zu, should be '%c' but is 0x%02x '%c'", istrTell(*in), c, istrPeek(in), istrPeek(in));
+    json__logv();
+    return false;
 }
 
-jsonval_t *json__parse_pair(arena_t *arena, instream_t *in, jsonflags_e flags);
-jsonval_t *json__parse_value(arena_t *arena, instream_t *in, jsonflags_e flags);
+static bool json__parse_pair(arena_t *arena, instream_t *in, jsonflags_e flags, jsonval_t **out);
+static bool json__parse_value(arena_t *arena, instream_t *in, jsonflags_e flags, jsonval_t **out);
 
-bool json__is_value_finished(instream_t *in) {
+static bool json__is_value_finished(instream_t *in) {
     usize old_pos = istrTell(*in);
     
     istrSkipWhitespace(in);
@@ -53,30 +40,46 @@ bool json__is_value_finished(instream_t *in) {
     return false;
 }
 
-void json__parse_null(instream_t *in) {
+static bool json__parse_null(instream_t *in) {
     strview_t null_view = istrGetViewLen(in, 4);
+    bool is_valid = true;
     
     if (!strvEquals(null_view, strv("null"))) {
-        fatal("should be null but is: (%.*s) at %zu", null_view.len, null_view.buf, istrTell(*in));
+        err("should be null but is: (%.*s) at %zu", null_view.len, null_view.buf, istrTell(*in));
+        is_valid = false;
     }
 
     if (!json__is_value_finished(in)) {
-        fatal("null, should be finished, but isn't at %zu", istrTell(*in));
+        err("null, should be finished, but isn't at %zu", istrTell(*in));
+        is_valid = false;
     }
+
+    if (!is_valid) json__logv();
+
+    return is_valid;
 }
 
-jsonval_t *json__parse_array(arena_t *arena, instream_t *in, jsonflags_e flags) {
-    json__ensure('[');
+static bool json__parse_array(arena_t *arena, instream_t *in, jsonflags_e flags, jsonval_t **out) {
+    jsonval_t *head = NULL;
+    
+    if (!json__ensure('[')) {
+        json__logv();
+        goto fail;
+    }
 
     istrSkipWhitespace(in);
 
     // if it is an empty array
     if (istrPeek(in) == ']') {
         istrSkip(in, 1);
-        return NULL;
+        goto success;
     }
     
-    jsonval_t *head = json__parse_value(arena, in, flags);
+    if (!json__parse_value(arena, in, flags, &head)) {
+        json__logv();
+        goto fail;
+    }
+
     jsonval_t *cur = head;
     
     while (true) {
@@ -88,11 +91,22 @@ jsonval_t *json__parse_array(arena_t *arena, instream_t *in, jsonflags_e flags) 
             {
                 istrSkipWhitespace(in);
                 // trailing comma
-                if (!(flags & JSON_NO_TRAILING_COMMAS) && istrPeek(in) == ']') {
-                    return head;
+                if (istrPeek(in) == ']') {
+                    if (flags & JSON_NO_TRAILING_COMMAS) {
+                        err("trailing comma in array at at %zu: (%c)(%d)", istrTell(*in), *in->cur, *in->cur);
+                        json__logv();
+                        goto fail;
+                    }
+                    else {
+                        continue;
+                    }
                 }
 
-                jsonval_t *next = json__parse_value(arena, in, flags);
+                jsonval_t *next = NULL;
+                if (!json__parse_value(arena, in, flags, &next)) {
+                    json__logv();
+                    goto fail;
+                }
                 cur->next = next;
                 next->prev = cur;
                 cur = next;
@@ -100,17 +114,27 @@ jsonval_t *json__parse_array(arena_t *arena, instream_t *in, jsonflags_e flags) 
             }
             default:
                 istrRewindN(in, 1);
-                fatal("unknown char after array at %zu: (%c)(%d)", istrTell(*in), *in->cur, *in->cur);
+                err("unknown char after array at %zu: (%c)(%d)", istrTell(*in), *in->cur, *in->cur);
+                json__logv();
+                goto fail;
         }
     }
 
-    return NULL;
+success:
+    *out = head;
+    return true;
+fail:
+    *out = NULL;
+    return false;
 }
 
-str_t json__parse_string(arena_t *arena, instream_t *in, jsonflags_e flags) {
-    istrSkipWhitespace(in);
+static bool json__parse_string(arena_t *arena, instream_t *in, str_t *out) {
+    istrSkipWhitespace(in); 
 
-    json__ensure('"');
+    if (!json__ensure('"')) {
+        json__logv();
+        goto fail;
+    }
 
     const char *from = in->cur;
     
@@ -122,61 +146,83 @@ str_t json__parse_string(arena_t *arena, instream_t *in, jsonflags_e flags) {
     
     usize len = in->cur - from;
 
-    str_t out = str(arena, from, len);
+    *out = str(arena, from, len);
 
-    json__ensure('"');
-
-    return out;
-}
-
-double json__parse_number(instream_t *in, jsonflags_e flags) {
-    double value = 0.0;
-    istrGetDouble(in, &value);
-    return value;
-}
-
-bool json__parse_bool(instream_t *in, jsonflags_e flags) {
-    size_t remaining = istrRemaining(*in);
-    if (remaining >= 4 && memcmp(in->cur, "true", 4) == 0) {
-        istrSkip(in, 4);
-        return true;
+    if (!json__ensure('"')) {
+        json__logv();
+        goto fail;
     }
-    if (remaining >= 5 && memcmp(in->cur, "false", 5) == 0) {
-        istrSkip(in, 5);
-        return false;
-    }
-    fatal("unknown boolean at %zu: %.10s", istrTell(*in), in->cur);
+
+success:
+    return true;
+fail:
+    *out = (str_t){0};
     return false;
 }
 
-jsonval_t *json__parse_obj(arena_t *arena, instream_t *in, jsonflags_e flags) {
-    json__ensure('{');
+static bool json__parse_number(instream_t *in, double *out) {
+    return istrGetDouble(in, out);
+}
+
+static bool json__parse_bool(instream_t *in, bool *out) {
+    size_t remaining = istrRemaining(*in);
+    if (remaining >= 4 && memcmp(in->cur, "true", 4) == 0) {
+        istrSkip(in, 4);
+        *out = true;
+    }
+    else if (remaining >= 5 && memcmp(in->cur, "false", 5) == 0) {
+        istrSkip(in, 5);
+        *out = false;
+    }
+    else {
+        err("unknown boolean at %zu: %.10s", istrTell(*in), in->cur);
+        json__logv();
+        return false;
+    }
+
+    return true;
+}
+
+static bool json__parse_obj(arena_t *arena, instream_t *in, jsonflags_e flags, jsonval_t **out) {
+    if (!json__ensure('{')) {
+        json__logv();
+        goto fail;
+    }
 
     istrSkipWhitespace(in);
 
     // if it is an empty object
     if (istrPeek(in) == '}') {
         istrSkip(in, 1);
-        return NULL;
+        *out = NULL;
+        return true;
     }
 
-    jsonval_t *head = json__parse_pair(arena, in, flags);
+    jsonval_t *head = NULL;
+    if (!json__parse_pair(arena, in, flags, &head)) {
+        json__logv();
+        goto fail;
+    }
     jsonval_t *cur = head;
 
     while (true) {
         istrSkipWhitespace(in);
         switch (istrGet(in)) {
             case '}':
-                return head;
+                goto success;
             case ',':
             {
                 istrSkipWhitespace(in);
                 // trailing commas
                 if (!(flags & JSON_NO_TRAILING_COMMAS) && istrPeek(in) == '}') {
-                    return head;
+                    goto success;
                 }
 
-                jsonval_t *next = json__parse_pair(arena, in, flags);
+                jsonval_t *next = NULL;
+                if (!json__parse_pair(arena, in, flags, &next)) {
+                    json__logv();
+                    goto fail;
+                }
                 cur->next = next;
                 next->prev = cur;
                 cur = next;
@@ -184,83 +230,136 @@ jsonval_t *json__parse_obj(arena_t *arena, instream_t *in, jsonflags_e flags) {
             }
             default:
                 istrRewindN(in, 1);
-                fatal("unknown char after object at %zu: (%c)(%d)", istrTell(*in), *in->cur, *in->cur);
+                err("unknown char after object at %zu: (%c)(%d)", istrTell(*in), *in->cur, *in->cur);
+                json__logv();
+                goto fail;
         }
     }
 
-    return head;
+success:
+    *out = head;
+    return true;
+fail:
+    *out = NULL;
+    return false;
 }
 
-jsonval_t *json__parse_pair(arena_t *arena, instream_t *in, jsonflags_e flags) {
-    str_t key = json__parse_string(arena, in, flags);
+static bool json__parse_pair(arena_t *arena, instream_t *in, jsonflags_e flags, jsonval_t **out) {
+    str_t key = {0};
+    if (!json__parse_string(arena, in, &key)) {
+        json__logv();
+        goto fail;
+    }
 
     // skip preamble
     istrSkipWhitespace(in);
-    json__ensure(':');
+    if (!json__ensure(':')) {
+        json__logv();
+        goto fail;
+    }
 
-    jsonval_t *out = json__parse_value(arena, in, flags);
-    out->key = key;
-    return out;
+    if (!json__parse_value(arena, in, flags, out)) {
+        json__logv();
+        goto fail;
+    }
+    
+    (*out)->key = key;
+    return true;
+
+fail: 
+    *out = NULL;
+    return false;
 }
 
-jsonval_t *json__parse_value(arena_t *arena, instream_t *in, jsonflags_e flags) {
-    jsonval_t *out = alloc(arena, jsonval_t);
+static bool json__parse_value(arena_t *arena, instream_t *in, jsonflags_e flags, jsonval_t **out) {
+    jsonval_t *val = alloc(arena, jsonval_t);
 
     istrSkipWhitespace(in);
 
     switch (istrPeek(in)) {
         // object
         case '{':
-            out->object = json__parse_obj(arena, in, flags);
-            out->type = JSON_OBJECT;
+            if (!json__parse_obj(arena, in, flags, &val->object)) {
+                json__logv();
+                goto fail;
+            }
+            val->type = JSON_OBJECT;
             break;
         // array
         case '[':
-            out->array = json__parse_array(arena, in, flags);
-            out->type = JSON_ARRAY;
+            if (!json__parse_array(arena, in, flags, &val->array)) {
+                json__logv();
+                goto fail;
+            }
+            val->type = JSON_ARRAY;
             break;
         // string
         case '"':
-            out->string = json__parse_string(arena, in, flags);
-            out->type = JSON_STRING;
+            if (!json__parse_string(arena, in, &val->string)) {
+                json__logv();
+                goto fail;
+            }
+            val->type = JSON_STRING;
             break;
         // boolean
         case 't': // fallthrough
         case 'f':
-            out->boolean = json__parse_bool(in, flags);
-            out->type = JSON_BOOL;
+            if (!json__parse_bool(in, &val->boolean)) {
+                json__logv();
+                goto fail;
+            }
+            val->type = JSON_BOOL;
             break;
         // null
         case 'n': 
-            json__parse_null(in);
-            out->type = JSON_NULL;
+            if (!json__parse_null(in)) {
+                json__logv();
+                goto fail;
+            }
+            val->type = JSON_NULL;
             break;
         // comment
         case '/':
-            fatal("TODO comments");
+            err("TODO comments");
             break;
         // number
         default:
-            out->number = json__parse_number(in, flags);
-            out->type = JSON_NUMBER;
+            if (!json__parse_number(in, &val->number)) {
+                json__logv();
+                goto fail;
+            }
+            val->type = JSON_NUMBER;
             break;
     }
 
-    return out;
+    *out = val;
+    return true;
+fail:
+    *out = NULL;
+    return false;
 }
 
-json_t jsonParse(arena_t *arena, arena_t scratch, const char *filename, jsonflags_e flags) {
-    str_t data = json__read_whole(&scratch, filename);
+json_t jsonParse(arena_t *arena, arena_t scratch, strview_t filename, jsonflags_e flags) {
+    str_t data = fileReadWholeStr(&scratch, filename);
+    return NULL;
     json_t json = jsonParseStr(arena, strv(data), flags);
     return json;
 }
 
 json_t jsonParseStr(arena_t *arena, strview_t jsonstr, jsonflags_e flags) {
+    arena_t before = *arena;
+
     jsonval_t *root = alloc(arena, jsonval_t);
     root->type = JSON_OBJECT;
     
     instream_t in = istrInitLen(jsonstr.buf, jsonstr.len);
-    root->object = json__parse_obj(arena, &in, flags);
+    
+    if (!json__parse_obj(arena, &in, flags, &root->object)) {
+        // reset arena
+        *arena = before;
+        json__logv();
+        return NULL;
+    }
 
     return root;
 }

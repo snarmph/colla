@@ -2,7 +2,11 @@
 
 #include "warnings/colla_warn_beg.h"
 
+#include <assert.h>
+#include <stdio.h>
+
 #include "arena.h"
+#include "str.h"
 #include "strstream.h"
 #include "format.h"
 #include "socket.h"
@@ -14,7 +18,9 @@
     #endif
 
     #include <windows.h>
-    #include <wininet.h>
+    #if !COLLA_TCC
+        #include <wininet.h>
+    #endif
 #endif
 
 static const TCHAR *https__get_method_str(http_method_e method);
@@ -93,7 +99,7 @@ http_req_t httpParseReq(arena_t *arena, strview_t request) {
 
     req.body = strvTrim(istrGetViewLen(&in, SIZE_MAX));
 
-    strview_t methods[] = { strv("GET"), strv("POST"), strv("HEAD"), strv("PUT"), strv("DELETE") };
+    strview_t methods[5] = { strv("GET"), strv("POST"), strv("HEAD"), strv("PUT"), strv("DELETE") };
     usize methods_count = arrlen(methods);
 
     for (usize i = 0; i < methods_count; ++i) {
@@ -254,6 +260,49 @@ str_t httpMakeUrlSafe(arena_t *arena, strview_t string) {
     return out;
 }
 
+str_t httpDecodeUrlSafe(arena_t *arena, strview_t string) {
+    usize final_len = string.len;
+
+    for (usize i = 0; i < string.len; ++i) {
+        if (string.buf[i] == '%') {
+            final_len -= 2;
+            i += 2;
+        }
+    }
+
+    assert(final_len <= string.len);
+
+    str_t out = {
+        .buf = alloc(arena, char, final_len + 1),
+        .len = final_len
+    };
+
+    usize k = 0;
+
+    for (usize i = 0; i < string.len; ++i) {
+        if (string.buf[i] == '%') {
+            // skip %
+            ++i;
+
+            unsigned int ch = 0;
+            int result = sscanf(string.buf + i, "%02X", &ch);
+            if (result != 1 || ch > UINT8_MAX) {
+                err("malformed url at %zu (%s)", i, string.buf + i);
+                return (str_t){0};
+            }
+            out.buf[k++] = (char)ch;
+            
+            // skip first char of hex
+            ++i;
+        }
+        else {
+            out.buf[k++] = string.buf[i];
+        }
+    }
+
+    return out;
+}
+
 http_url_t httpSplitUrl(strview_t url) {
     http_url_t out = {0};
 
@@ -326,7 +375,7 @@ http_res_t httpRequest(http_request_desc_t *request) {
     assert(url.host.len < arrlen(hostname));
     memcpy(hostname, url.host.buf, url.host.len);
 
-    const int DEFAULT_HTTP_PORT = 80;
+    const uint16 DEFAULT_HTTP_PORT = 80;
     if (!skConnect(sock, hostname, DEFAULT_HTTP_PORT)) {
         err("Couldn't connect to host %s: %s", hostname, skGetErrorString());
         goto error;
@@ -338,7 +387,7 @@ http_res_t httpRequest(http_request_desc_t *request) {
         goto error;
     }
 
-    if (skSend(sock, reqstr.buf, (int)reqstr.len) == -1) {
+    if (skSend(sock, reqstr.buf, (int)reqstr.len) == SOCKET_ERROR) {
         err("couldn't send request to socket: %s", skGetErrorString());
         goto error;
     }
@@ -348,7 +397,7 @@ http_res_t httpRequest(http_request_desc_t *request) {
     int read = 0;
     do {
         read = skReceive(sock, buffer, arrlen(buffer));
-        if (read == -1) {
+        if (read == SOCKET_ERROR) {
             err("couldn't get the data from the server: %s", skGetErrorString());
             goto error;
         }
@@ -374,7 +423,7 @@ error:
 #if COLLA_WIN
 
 buffer_t httpsRequest(http_request_desc_t *req) {
-    HINTERNET internet = InternetOpen(
+    HINTERNET internet = InternetOpenA(
         TEXT("COLLA"), 
         INTERNET_OPEN_TYPE_PRECONFIG,
         NULL,
@@ -446,7 +495,7 @@ buffer_t httpsRequest(http_request_desc_t *req) {
         HttpAddRequestHeadersA(
             request,
             header_str.buf,
-            header_str.len,
+            (DWORD)header_str.len,
             0
         );
     }
@@ -456,7 +505,7 @@ buffer_t httpsRequest(http_request_desc_t *req) {
         NULL,
         0,
         (void *)req->body.buf,
-        req->body.len
+        (DWORD)req->body.len
     );
     if (!request_sent) {
         fatal("call to HttpSendRequest failed: %u", GetLastError());

@@ -17,6 +17,11 @@ typedef struct {
 } file_t;
 
 bool fileExists(const char *name);
+TCHAR *fileGetFullPath(arena_t *arena, strview_t filename);
+strview_t fileGetFilename(strview_t path);
+strview_t fileGetExtension(strview_t path);
+void fileSplitPath(strview_t path, strview_t *dir, strview_t *name, strview_t *ext);
+bool fileDelete(arena_t scratch, strview_t filename);
 
 file_t fileOpen(arena_t scratch, strview_t name, filemode_e mode);
 void fileClose(file_t ctx);
@@ -37,13 +42,14 @@ void fileRewind(file_t ctx);
 usize fileTell(file_t ctx);
 usize fileSize(file_t ctx);
 
-buffer_t fileReadWhole(arena_t *arena, arena_t scratch, strview_t name);
+buffer_t fileReadWhole(arena_t *arena, strview_t name);
 buffer_t fileReadWholeFP(arena_t *arena, file_t ctx);
 
-str_t fileReadWholeStr(arena_t *arena, arena_t scratch, strview_t name);
+str_t fileReadWholeStr(arena_t *arena, strview_t name);
 str_t fileReadWholeStrFP(arena_t *arena, file_t ctx);
 
 bool fileWriteWhole(arena_t scratch, strview_t name, const void *buf, usize len);
 
 uint64 fileGetTime(arena_t scratch, strview_t name);
 uint64 fileGetTimeFP(file_t ctx);
+bool fileHasChanged(arena_t scratch, strview_t name, uint64 last_timestamp);

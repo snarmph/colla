@@ -2,6 +2,8 @@
 
 #include <stdarg.h>
 
+#include "collatypes.h"
+
 typedef struct arena_t arena_t;
 
 int fmtPrint(const char *fmt, ...);

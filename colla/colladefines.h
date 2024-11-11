@@ -1,6 +1,7 @@
 #pragma once
 
 #define arrlen(a) (sizeof(a) / sizeof((a)[0]))
+#define for_each(it, list) for (typeof(list) it = list; it; it = it->next)
 
 #if defined(_DEBUG) || !defined(NDEBUG)
 #define COLLA_DEBUG   1
@@ -15,18 +16,28 @@
 #define COLLA_WIN 1
 #define COLLA_OSX 0
 #define COLLA_LIN 0
+#define COLLA_EMC 0
 
-#elif defined(__APPLE__)
+#elif defined(__EMSCRIPTEN__)
 
 #define COLLA_WIN 0
-#define COLLA_OSX 1
+#define COLLA_OSX 0
 #define COLLA_LIN 0
+#define COLLA_EMC 1
 
 #elif defined(__linux__)
 
 #define COLLA_WIN 0
 #define COLLA_OSX 0
 #define COLLA_LIN 1
+#define COLLA_EMC 0
+
+#elif defined(__APPLE__)
+
+#define COLLA_WIN 0
+#define COLLA_OSX 1
+#define COLLA_LIN 0
+#define COLLA_EMC 0
 
 #endif
 

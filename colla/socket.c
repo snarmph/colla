@@ -5,7 +5,8 @@
 #endif
 
 #if COLLA_WIN
-#include <winsock2.h>
+
+typedef int socklen_t;
 
 bool skInit(void) {
     WSADATA w;
@@ -18,7 +19,7 @@ bool skCleanup(void) {
 }
 
 bool skClose(socket_t sock) {
-    return closesocket(sock) != -1;
+    return closesocket(sock) != SOCKET_ERROR;
 }
 
 int skPoll(skpoll_t *to_poll, int num_to_poll, int timeout) {
@@ -31,7 +32,6 @@ int skGetError(void) {
 
 #else
 
-#include <netinet/in.h> 
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <unistd.h>
@@ -48,7 +48,7 @@ bool skCleanup(void) {
 }
 
 bool skClose(socket_t sock) {
-    return close(sock) != -1;
+    return close(sock) != SOCKET_ERROR;
 }
 
 int skPoll(skpoll_t *to_poll, int num_to_poll, int timeout) {
@@ -90,7 +90,7 @@ socket_t skOpenPro(int af, int type, int protocol) {
 }
 
 bool skIsValid(socket_t sock) {
-    return sock != (socket_t)-1;
+    return sock != SOCKET_ERROR;
 }
 
 skaddrin_t skAddrinInit(const char *ip, uint16_t port) {
@@ -108,7 +108,7 @@ bool skBind(socket_t sock, const char *ip, uint16_t port) {
 }
 
 bool skBindPro(socket_t sock, const skaddr_t *name, int namelen) {
-    return bind(sock, name, namelen) != -1;
+    return bind(sock, name, namelen) != SOCKET_ERROR;
 }
 
 bool skListen(socket_t sock) {
@@ -116,7 +116,7 @@ bool skListen(socket_t sock) {
 }
 
 bool skListenPro(socket_t sock, int backlog) {
-    return listen(sock, backlog) != -1;
+    return listen(sock, backlog) != SOCKET_ERROR;
 }
 
 socket_t skAccept(socket_t sock) {
@@ -126,7 +126,7 @@ socket_t skAccept(socket_t sock) {
 }
 
 socket_t skAcceptPro(socket_t sock, skaddr_t *addr, int *addrlen) {
-    return accept(sock, addr, addrlen);
+    return accept(sock, addr, (socklen_t *)addrlen);
 }
 
 bool skConnect(socket_t sock, const char *server, unsigned short server_port) {
@@ -144,7 +144,7 @@ bool skConnect(socket_t sock, const char *server, unsigned short server_port) {
 }
 
 bool skConnectPro(socket_t sock, const skaddr_t *name, int namelen) {
-    return connect(sock, name, namelen) != -1;
+    return connect(sock, name, namelen) != SOCKET_ERROR;
 }
 
 int skSend(socket_t sock, const void *buf, int len) {
@@ -177,7 +177,7 @@ int skReceiveFrom(socket_t sock, void *buf, int len, skaddrin_t *from) {
 }
 
 int skReceiveFromPro(socket_t sock, void *buf, int len, int flags, skaddr_t *from, int *fromlen) {
-    return recvfrom(sock, buf, len, flags, from, fromlen);
+    return recvfrom(sock, buf, len, flags, from, (socklen_t *)fromlen);
 }
 
 // put this at the end of file to not make everything else unreadable

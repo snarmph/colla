@@ -7,7 +7,18 @@
 #include "tracelog.h"
 
 #if COLLA_WIN
-#include <stringapiset.h>
+
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+
+#else
+
+#include <wchar.h>
+
+#endif
+
+#if COLLA_TCC
+#include "tcc/colla_tcc.h"
 #endif
 
 // == STR_T ========================================================
@@ -44,13 +55,14 @@ str_t strFmt(arena_t *arena, const char *fmt, ...) {
 str_t strFmtv(arena_t *arena, const char *fmt, va_list args) {
     va_list vcopy;
     va_copy(vcopy, args);
+    // stb_vsnprintf returns the length + null_term
     int len = fmtBufferv(NULL, 0, fmt, vcopy);
     va_end(vcopy);
 
     char *buffer = alloc(arena, char, len + 1);
     fmtBufferv(buffer, len + 1, fmt, args);
 
-    return (str_t){ .buf = buffer, .len = (usize)len };
+    return (str_t) { .buf = buffer, .len = (usize)len };
 }
 
 str_t strFromWChar(arena_t *arena, const wchar_t *src, usize srclen) {
@@ -87,6 +99,8 @@ str_t strFromWChar(arena_t *arena, const wchar_t *src, usize srclen) {
         NULL, NULL
     );
 
+    out.len = outlen;
+    
 #elif COLLA_LIN
     fatal("strFromWChar not implemented yet!");
 #endif
@@ -101,7 +115,7 @@ bool strEquals(str_t a, str_t b) {
 int strCompare(str_t a, str_t b) {
     return a.len == b.len ?
         memcmp(a.buf, b.buf, a.len) :
-        a.len - (int)b.len;
+        (int)(a.len - b.len);
 }
 
 str_t strDup(arena_t *arena, str_t src) {
@@ -190,7 +204,7 @@ bool strvEquals(strview_t a, strview_t b) {
 int strvCompare(strview_t a, strview_t b) {
     return a.len == b.len ?
         memcmp(a.buf, b.buf, a.len) :
-        a.len - (int)b.len;
+        (int)(a.len - b.len);
 }
 
 wchar_t *strvToWChar(arena_t *arena, strview_t ctx, usize *outlen) {
@@ -273,7 +287,7 @@ strview_t strvTrimLeft(strview_t ctx) {
     strview_t out = ctx;
     for (usize i = 0; i < ctx.len; ++i) {
         char c = ctx.buf[i];
-        if (c != ' ' || c < '\t' || c > '\r') {
+        if (c != ' ' && (c < '\t' || c > '\r')) {
             break;
         }
         out.buf++;
@@ -286,7 +300,7 @@ strview_t strvTrimRight(strview_t ctx) {
     strview_t out = ctx;
     for (isize i = ctx.len - 1; i >= 0; --i) {
         char c = ctx.buf[i];
-        if (c != ' ' || c < '\t' || c > '\r') {
+        if (c != ' ' && (c < '\t' || c > '\r')) {
             break;
         }
         out.len--;
@@ -348,7 +362,7 @@ usize strvFind(strview_t ctx, char c, usize from) {
 usize strvFindView(strview_t ctx, strview_t view, usize from) {
     if (ctx.len < view.len) return STR_NONE;
     usize end = ctx.len - view.len;
-    for (usize i = 0; i < end; ++i) {
+    for (usize i = from; i < end; ++i) {
         if (memcmp(ctx.buf + i, view.buf, view.len) == 0) {
             return i;
         }
@@ -370,7 +384,7 @@ usize strvRFind(strview_t ctx, char c, usize from_right) {
 usize strvRFindView(strview_t ctx, strview_t view, usize from_right) {
     if (from_right > ctx.len) from_right = ctx.len;
     isize end = (isize)(ctx.len - from_right);
-    if (end < view.len) return STR_NONE;
+    if (end < (isize)view.len) return STR_NONE;
     for (isize i = end - view.len; i >= 0; --i) {
         if (memcmp(ctx.buf + i, view.buf, view.len) == 0) {
             return (usize)i;

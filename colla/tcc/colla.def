@@ -1,0 +1,12 @@
+LIBRARY
+
+EXPORTS
+GetThreadId
+InitializeConditionVariable
+WakeConditionVariable
+WakeAllConditionVariable
+SleepConditionVariableCS
+InternetOpen
+InternetConnect
+HttpOpenRequest
+HttpSendRequest

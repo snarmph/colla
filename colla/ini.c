@@ -29,6 +29,10 @@ ini_t iniParseStr(arena_t *arena, strview_t str, const iniopts_t *options) {
     return out;
 }
 
+bool iniIsValid(ini_t *ctx) {
+    return ctx && !strvIsEmpty(ctx->text);
+}
+
 initable_t *iniGetTable(ini_t *ctx, strview_t name) {
     initable_t *t = ctx ? ctx->tables : NULL;
     while (t) {
@@ -161,9 +165,10 @@ static void ini__add_value(arena_t *arena, initable_t *table, instream_t *in, in
 
     strview_t key = strvTrim(istrGetView(in, opts->key_value_divider));
     istrSkip(in, 1);
-    strview_t value = strvTrim(istrGetView(in, '\n'));
+    strview_t value = strvTrim(istrGetViewEither(in, strv("\n#;")));
     istrSkip(in, 1);
     inivalue_t *newval = NULL;
+
     
     if (opts->merge_duplicate_keys) {
         newval = table->values;
@@ -213,6 +218,8 @@ static void ini__add_table(arena_t *arena, ini_t *ctx, instream_t *in, iniopts_t
     if (!table) {
         table = alloc(arena, initable_t);
 
+        table->name = name;
+
         if (!ctx->tables) {
             ctx->tables = table;
         }
@@ -242,6 +249,11 @@ static void ini__add_table(arena_t *arena, ini_t *ctx, instream_t *in, iniopts_t
 
 static void ini__parse(arena_t *arena, ini_t *ini, const iniopts_t *options) {
     iniopts_t opts = ini__get_options(options);
+
+    initable_t *root = alloc(arena, initable_t);
+    root->name = INI_ROOT;
+    ini->tables = root;
+    ini->tail = root;
 
     instream_t in = istrInitLen(ini->text.buf, ini->text.len);
 

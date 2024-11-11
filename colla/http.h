@@ -57,6 +57,7 @@ void httpSetHeader(http_header_t *headers, strview_t key, strview_t value);
 strview_t httpGetHeader(http_header_t *headers, strview_t key);
 
 str_t httpMakeUrlSafe(arena_t *arena, strview_t string);
+str_t httpDecodeUrlSafe(arena_t *arena, strview_t string);
 
 typedef struct {
     strview_t host;

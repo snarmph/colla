@@ -7,6 +7,39 @@
 #include "strstream.h"
 #include "arena.h"
 
+#if COLLA_NOHTTP
+const char *httpGetStatusString(int status) {
+    switch (status) {
+        case 200: return "OK";              
+        case 201: return "CREATED";         
+        case 202: return "ACCEPTED";        
+        case 204: return "NO CONTENT";      
+        case 205: return "RESET CONTENT";   
+        case 206: return "PARTIAL CONTENT"; 
+
+        case 300: return "MULTIPLE CHOICES";    
+        case 301: return "MOVED PERMANENTLY";   
+        case 302: return "MOVED TEMPORARILY";   
+        case 304: return "NOT MODIFIED";        
+
+        case 400: return "BAD REQUEST";             
+        case 401: return "UNAUTHORIZED";            
+        case 403: return "FORBIDDEN";               
+        case 404: return "NOT FOUND";               
+        case 407: return "RANGE NOT SATISFIABLE";   
+
+        case 500: return "INTERNAL SERVER_ERROR";   
+        case 501: return "NOT IMPLEMENTED";         
+        case 502: return "BAD GATEWAY";             
+        case 503: return "SERVICE NOT AVAILABLE";   
+        case 504: return "GATEWAY TIMEOUT";         
+        case 505: return "VERSION NOT SUPPORTED";   
+    }
+    
+    return "UNKNOWN";
+}
+#endif
+
 #define SERVER_BUFSZ 4096
 
 typedef enum {
@@ -15,6 +48,7 @@ typedef enum {
     PARSE_REQ_VERSION,
     PARSE_REQ_FIELDS,
     PARSE_REQ_FINISHED,
+    PARSE_REQ_FAILED,
 } server__req_status_e;
 
 typedef struct {
@@ -36,6 +70,7 @@ typedef struct server_t {
     socket_t socket;
     server__route_t *routes;
     server__route_t *routes_default;
+    socket_t current_client;
     bool should_stop;
 } server_t;
 
@@ -68,10 +103,10 @@ bool server__parse_chunk(arena_t *arena, server__req_ctx_t *ctx, char buffer[SER
                 ctx->req.method = HTTP_POST;
             }
             else {
-                fatal("unknown method: (%.*s)", method.len, method.buf);
+                err("unknown method: (%.*s)", method.len, method.buf);
+                ctx->status = PARSE_REQ_FAILED;
+                break;
             }
-
-            info("parsed method: %.*s", method.len, method.buf);
 
             ctx->status = PARSE_REQ_PAGE;
         }
@@ -88,8 +123,6 @@ bool server__parse_chunk(arena_t *arena, server__req_ctx_t *ctx, char buffer[SER
 
             ctx->req.page = str(arena, page);
 
-            info("parsed page: %.*s", page.len, page.buf);
-
             ctx->status = PARSE_REQ_VERSION;
         }
         // fallthrough
@@ -104,11 +137,15 @@ bool server__parse_chunk(arena_t *arena, server__req_ctx_t *ctx, char buffer[SER
             }
 
             if (version.len < 8) {
-                fatal("version too short: (%.*s)", version.len, version.buf);
+                err("version too short: (%.*s)", version.len, version.buf);
+                ctx->status = PARSE_REQ_FAILED;
+                break;
             }
 
-            if (strvEquals(strvSub(version, 0, 4), strv("HTTP"))) {
-                fatal("version does not start with HTTP: (%.4s)", version.buf);
+            if (!strvEquals(strvSub(version, 0, 4), strv("HTTP"))) {
+                err("version does not start with HTTP: (%.4s)", version.buf);
+                ctx->status = PARSE_REQ_FAILED;
+                break;
             }
 
             // skip HTTP
@@ -118,7 +155,9 @@ bool server__parse_chunk(arena_t *arena, server__req_ctx_t *ctx, char buffer[SER
             int scanned = sscanf(version.buf, "/%hhu.%hhu", &major, &minor);
 
             if (scanned != 2) {
-                fatal("could not scan both major and minor from version: (%.*s)", version.len, version.buf);
+                err("could not scan both major and minor from version: (%.*s)", version.len, version.buf);
+                ctx->status = PARSE_REQ_FAILED;
+                break;
             }
 
             ctx->req.version_major = major;
@@ -144,7 +183,9 @@ bool server__parse_chunk(arena_t *arena, server__req_ctx_t *ctx, char buffer[SER
 
                 strview_t key = istrGetView(&field_in, ':');
                 if (istrGet(&field_in) != ':') {
-                    fatal("field does not have ':' (%.*s)", field.len, field.buf);
+                    err("field does not have ':' (%.*s)", field.len, field.buf);
+                    ctx->status = PARSE_REQ_FAILED;
+                    break;
                 }
 
                 istrSkipWhitespace(&field_in);
@@ -202,7 +243,7 @@ bool server__parse_chunk(arena_t *arena, server__req_ctx_t *ctx, char buffer[SER
 
     memmove(ctx->fullbuf, ctx->fullbuf + istrTell(in), ctx->prevbuf_len);
 
-    return ctx->status == PARSE_REQ_FINISHED;
+    return ctx->status >= PARSE_REQ_FINISHED;
 }
 
 void server__parse_req_url(arena_t *arena, server_req_t *req) {
@@ -306,14 +347,14 @@ void serverRouteDefault(arena_t *arena, server_t *server, server_route_f cb, voi
 void serverStart(arena_t scratch, server_t *server) {
     usize start = arenaTell(&scratch);
 
+    info("Server started!");
+
     while (!server->should_stop) {
         socket_t client = skAccept(server->socket);
         if (!skIsValid(client)) {
             err("accept failed");
             continue;
         }
-
-        info("received connection: %zu", client);
 
         arenaRewind(&scratch, start);
 
@@ -323,7 +364,7 @@ void serverStart(arena_t scratch, server_t *server) {
         int read = 0;
         do {
             read = skReceive(client, buffer, sizeof(buffer));
-            if(read == -1) {
+            if(read == SOCKET_ERROR) {
                 fatal("couldn't get the data from the server: %s", skGetErrorString());
             }
             if (server__parse_chunk(&scratch, &req_ctx, buffer, read)) {
@@ -331,7 +372,10 @@ void serverStart(arena_t scratch, server_t *server) {
             }
         } while(read != 0);
 
-        info("parsed request");
+        if (req_ctx.status == PARSE_REQ_FAILED || req_ctx.status == PARSE_REQ_BEGIN) {
+            err("failed to parse request!");
+            goto end_connection;
+        }
 
         server_req_t req = req_ctx.req;
 
@@ -349,9 +393,16 @@ void serverStart(arena_t scratch, server_t *server) {
             route = server->routes_default;
         }
 
+        server->current_client = client;
         str_t response = route->fn(scratch, server, &req, route->userdata);
 
-        skSend(client, response.buf, response.len);
+        if (!skIsValid(server->current_client)) {
+            continue;
+        }
+
+        skSend(client, response.buf, (int)response.len);
+
+end_connection:
         skClose(client);
     }
 
@@ -369,14 +420,23 @@ str_t serverMakeResponse(arena_t *arena, int status_code, strview_t content_type
         arena,
         
         "HTTP/1.1 %d %s\r\n"
-        "Content-Type: %.*s\r\n"
+        "Content-Type: %v\r\n"
         "\r\n"
-        "%.*s",
+        "%v",
 
         status_code, httpGetStatusString(status_code),
-        content_type.len, content_type.buf,
-        body.len, body.buf
+        content_type,
+        body
     );
 }
+
+socket_t serverGetClient(server_t *server) {
+    return server->current_client;
+}
+
+void serverSetClient(server_t *server, socket_t client) {
+    server->current_client = client;
+}
+
 
 #undef SERVER_BUFSZ

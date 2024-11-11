@@ -72,20 +72,21 @@ static void vmem__update_page_size(void) {
     vmem__page_size = info.dwPageSize;
 }
 
-#elif COLLA_LIN
+// #elif COLLA_LIN
+#else
 
 #include <sys/mman.h>
 #include <unistd.h>
 #include <errno.h>
 #include <string.h>
 
-struct vmem__header {
+typedef struct {
     usize len;
-};
+} vmem__header;
 
 void *vmemInit(usize size, usize *out_padded_size) {
     size += sizeof(vmem__header);
-    usize alloc_size = padToPage(size);
+    usize alloc_size = vmemPadToPage(size);
 
     vmem__header *header = mmap(NULL, alloc_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
 
@@ -93,8 +94,8 @@ void *vmemInit(usize size, usize *out_padded_size) {
         fatal("could not map %zu memory: %s", size, strerror(errno));
     }
 
-    if (padded_size) {
-        *padded_size = alloc_size;
+    if (out_padded_size) {
+        *out_padded_size = alloc_size;
     }
 
     header->len = alloc_size;
@@ -115,8 +116,8 @@ bool vmemRelease(void *base_ptr) {
 
 bool vmemCommit(void *ptr, usize num_of_pages) {
     // mmap doesn't need a commit step
-    (VOID)ptr;
-    (VOID)num_of_pages;
+    (void)ptr;
+    (void)num_of_pages;
     return true;
 }
 
@@ -127,7 +128,7 @@ static void vmem__update_page_size(void) {
         fatal("could not get page size: %s", strerror(errno));
     }
 
-    page_size = (usize)lin_page_size;
+    vmem__page_size = (usize)lin_page_size;
 }
 
 #endif

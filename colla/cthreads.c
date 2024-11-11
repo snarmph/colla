@@ -9,15 +9,7 @@ typedef struct {
 
 #if COLLA_WIN
 #define WIN32_LEAN_AND_MEAN
-#include <handleapi.h>
-#include <processthreadsapi.h>
-#include <synchapi.h>
-
-#undef INFINITE
-#undef WAIT_FAILED
-// couple of defines to avoid including windows.h
-#define INFINITE            0xFFFFFFFF  // Infinite timeout
-#define WAIT_FAILED         ((DWORD)0xFFFFFFFF)
+#include <windows.h>
 
 // == THREAD ===========================================
 
@@ -60,6 +52,9 @@ int thrCurrentId(void) {
 }
 
 int thrGetId(cthread_t ctx) {
+#if COLLA_TCC
+    return 0;
+#endif
     return GetThreadId((HANDLE)ctx);
 }
 
@@ -108,6 +103,7 @@ bool mtxUnlock(cmutex_t ctx) {
     return true;
 }
 
+#if !COLLA_NO_CONDITION_VAR
 // == CONDITION VARIABLE ===============================
 
 #include "tracelog.h"
@@ -137,6 +133,8 @@ void condWait(condvar_t cond, cmutex_t mtx) {
 void condWaitTimed(condvar_t cond, cmutex_t mtx, int milliseconds) {
     SleepConditionVariableCS((CONDITION_VARIABLE *)cond, (CRITICAL_SECTION *)mtx, milliseconds);
 }
+
+#endif
 
 #else
 #include <pthread.h>
@@ -236,6 +234,8 @@ bool mtxUnlock(cmutex_t ctx) {
     return pthread_mutex_unlock((pthread_mutex_t *)ctx) == 0;
 }
 
+#if !COLLA_NO_CONDITION_VAR
+
 // == CONDITION VARIABLE ===============================
 
 condvar_t condInit(void) {
@@ -275,5 +275,7 @@ void condWaitTimed(condvar_t cond, cmutex_t mtx, int milliseconds) {
     timeout.tv_nsec += milliseconds * 1000000;
     pthread_cond_timedwait((pthread_cond_t *)cond, (pthread_mutex_t *)mtx, &timeout);
 }
+
+#endif
 
 #endif

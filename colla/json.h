@@ -38,10 +38,10 @@ typedef struct jsonval_t {
 
 typedef jsonval_t *json_t;
 
-json_t jsonParse(arena_t *arena, arena_t scratch, const char *filename, jsonflags_e flags);
+json_t jsonParse(arena_t *arena, arena_t scratch, strview_t filename, jsonflags_e flags);
 json_t jsonParseStr(arena_t *arena, strview_t jsonstr, jsonflags_e flags);
 
 jsonval_t *jsonGet(jsonval_t *node, strview_t key);
 
-#define json_for(name, arr) for (jsonval_t *name = arr->array; name; name = name->next)
 #define json_check(val, js_type) ((val) && (val)->type == js_type)
+#define json_for(name, arr) for (jsonval_t *name = json_check(arr, JSON_ARRAY) ? arr->array : NULL; name; name = name->next)

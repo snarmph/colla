@@ -11,8 +11,12 @@
         #pragma warning(disable:4996) // _CRT_SECURE_NO_WARNINGS.
     #endif
 
-    #include <handleapi.h>
+    #include <windows.h>
     
+#if COLLA_CMT_LIB
+    #pragma comment(lib, "User32")
+#endif
+
     // avoid including windows.h
     
     #ifndef STD_OUTPUT_HANDLE
@@ -22,29 +26,27 @@
         #define CP_UTF8             65001
     #endif
 
-    typedef unsigned short WORD;
-    typedef unsigned long DWORD;
-    typedef unsigned int UINT;
-    typedef int BOOL;
-    WINBASEAPI HANDLE WINAPI GetStdHandle(DWORD nStdHandle);
-    WINBASEAPI BOOL WINAPI SetConsoleTextAttribute(HANDLE hConsoleOutput, WORD wAttributes);
-    WINBASEAPI BOOL WINAPI SetConsoleOutputCP(UINT wCodePageID);
-
-    #ifndef TLOG_VS
-        #define TLOG_WIN32_NO_VS
-        #ifndef TLOG_NO_COLOURS
-            #define TLOG_NO_COLOURS
-        #endif
+    #ifndef TLOG_NO_COLOURS
+        #define TLOG_NO_COLOURS
     #endif
 #endif
 
-#ifdef TLOG_VS
-    #if COLLA_WIN
-        #error "can't use TLOG_VS if not on windows"
-    #endif
+#if COLLA_EMC
+    #define TLOG_NO_COLOURS
 #endif
 
-#ifdef TLOG_NO_COLOURS
+#if COLLA_EMC
+    #define COLOUR_BLACK   "<span class=\"black\">"
+    #define COLOUR_RED     "<span class=\"red\">"
+    #define COLOUR_GREEN   "<span class=\"green\">"
+    #define COLOUR_YELLOW  "<span class=\"yellow\">"
+    #define COLOUR_BLUE    "<span class=\"blue\">"
+    #define COLOUR_MAGENTA "<span class=\"magenta\">"
+    #define COLOUR_CYAN    "<span class=\"cyan\">"
+    #define COLOUR_WHITE   "<span class=\"white\">"
+    #define COLOUR_RESET   "</span></b>"
+    #define COLOUR_BOLD    "<b>"
+#elif defined(TLOG_NO_COLOURS)
     #define COLOUR_BLACK   ""
     #define COLOUR_RED     ""
     #define COLOUR_GREEN   ""
@@ -72,7 +74,7 @@
 
 bool use_newline = true;
 
-#ifdef TLOG_WIN32_NO_VS
+#if COLLA_WIN
 static void setLevelColour(int level) {
     WORD attribute = 15;
     switch (level) {
@@ -86,11 +88,23 @@ static void setLevelColour(int level) {
     HANDLE hc = GetStdHandle(STD_OUTPUT_HANDLE);
     SetConsoleTextAttribute(hc, attribute);
 }
+#else
+static void setLevelColour(int level) {
+    switch (level) {
+        case LogDebug:   printf(COLOUR_BLUE); break; 
+        case LogInfo:    printf(COLOUR_GREEN); break;
+        case LogWarning: printf(COLOUR_YELLOW); break;
+        case LogError:   printf(COLOUR_RED); break;
+        case LogFatal:   printf(COLOUR_MAGENTA); break;
+        default:         printf(COLOUR_RESET); break;
+    }
+}
 #endif
 
 void traceLog(int level, const char *fmt, ...) {
     va_list args;
-    va_start(args, fmt);    traceLogVaList(level, fmt, args);
+    va_start(args, fmt);
+    traceLogVaList(level, fmt, args);
     va_end(args);
 }
 
@@ -105,55 +119,82 @@ void traceLogVaList(int level, const char *fmt, va_list args) {
     mtxLock(g_mtx);
     #endif
 
-    char buffer[MAX_TRACELOG_MSG_LENGTH];
-    memset(buffer, 0, sizeof(buffer));
-
-    const char *beg;
+    const char *beg = "";
     switch (level) {
-        case LogTrace:   beg = COLOUR_BOLD COLOUR_WHITE  "[TRACE]: "   COLOUR_RESET; break; 
-        case LogDebug:   beg = COLOUR_BOLD COLOUR_BLUE   "[DEBUG]: "   COLOUR_RESET; break; 
-        case LogInfo:    beg = COLOUR_BOLD COLOUR_GREEN  "[INFO]: "    COLOUR_RESET; break; 
-        case LogWarning: beg = COLOUR_BOLD COLOUR_YELLOW "[WARNING]: " COLOUR_RESET; break; 
-        case LogError:   beg = COLOUR_BOLD COLOUR_RED    "[ERROR]: "   COLOUR_RESET; break; 
-        case LogFatal:   beg = COLOUR_BOLD COLOUR_RED    "[FATAL]: "   COLOUR_RESET; break;        
-        default:         beg = "";                              break;
+        case LogTrace:   beg = "[TRACE"   ; break; 
+        case LogDebug:   beg = "[DEBUG"   ; break; 
+        case LogInfo:    beg = "[INFO"    ; break; 
+        case LogWarning: beg = "[WARNING" ; break; 
+        case LogError:   beg = "[ERROR"   ; break; 
+        case LogFatal:   beg = "[FATAL"   ; break;        
+        default:         break;
     }
 
-    size_t offset = 0;
-
-#ifndef TLOG_WIN32_NO_VS
-    offset = strlen(beg);
-    strncpy(buffer, beg, sizeof(buffer));
-#endif
-
-    fmtBufferv(buffer + offset, sizeof(buffer) - offset, fmt, args);
-
-#if defined(TLOG_VS)
-    OutputDebugStringA(buffer);
-    if(use_newline) OutputDebugStringA("\n");
-#elif defined(TLOG_WIN32_NO_VS)
+#if COLLA_WIN
     SetConsoleOutputCP(CP_UTF8);
+#endif
     setLevelColour(level);
     printf("%s", beg);
+
+#if GAME_CLIENT
+    putchar(':');
+    traceSetColour(COL_CYAN);
+    printf("CLIENT");
+#elif GAME_HOST
+    putchar(':');
+    traceSetColour(COL_MAGENTA);
+    printf("HOST");
+#endif
+
+    setLevelColour(level);
+    printf("]: ");
+
     // set back to white
     setLevelColour(LogTrace);
-    printf("%s", buffer);
-    if(use_newline) puts("");
+    // vprintf(fmt, args);
+    fmtPrintv(fmt, args);
+
+    if(use_newline) {
+#if COLLA_EMC
+        puts("<br>");
 #else
-    printf("%s", buffer);
-    if(use_newline) puts("");
+        puts("");
 #endif
+    }
 
 #ifndef TLOG_DONT_EXIT_ON_FATAL
     if (level == LogFatal) {
+
+#ifndef TLOG_NO_MSGBOX
+
+#if COLLA_WIN
+        char errbuff[1024];
+        fmtBufferv(errbuff, sizeof(errbuff), fmt, args);
+
+        char captionbuf[] = 
+#if GAME_HOST
+            "Fatal Host Error";
+#elif GAME_CLIENT
+            "Fatal Client Error";
+#else
+            "Fatal Error";
+#endif
+        MessageBoxA(
+            NULL,
+            errbuff, captionbuf,
+            MB_ICONERROR | MB_OK
+        );
+#endif
+
+#endif
+        fflush(stdout);
         abort();
-        exit(1);
     }
 #endif
 
-    #ifdef TLOG_MUTEX
+#ifdef TLOG_MUTEX
     mtxUnlock(g_mtx);
-    #endif
+#endif
 }
 
 void traceUseNewline(bool newline) {
@@ -161,18 +202,18 @@ void traceUseNewline(bool newline) {
 }
 
 void traceSetColour(colour_e colour) {
-#ifdef TLOG_WIN32_NO_VS
+#if COLLA_WIN
     SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), colour);
 #else
     switch (colour) {
-        case COL_RESET:   printf(RESET);   break;
-        case COL_BLACK:   printf(BLACK);   break;
-        case COL_BLUE:    printf(BLUE);    break;
-        case COL_GREEN:   printf(GREEN);   break;
-        case COL_CYAN:    printf(CYAN);    break;
-        case COL_RED:     printf(RED);     break;
-        case COL_MAGENTA: printf(MAGENTA); break;
-        case COL_YELLOW:  printf(YELLOW);  break;
+        case COL_RESET:   printf(COLOUR_RESET);   break;
+        case COL_BLACK:   printf(COLOUR_BLACK);   break;
+        case COL_BLUE:    printf(COLOUR_BLUE);    break;
+        case COL_GREEN:   printf(COLOUR_GREEN);   break;
+        case COL_CYAN:    printf(COLOUR_CYAN);    break;
+        case COL_RED:     printf(COLOUR_RED);     break;
+        case COL_MAGENTA: printf(COLOUR_MAGENTA); break;
+        case COL_YELLOW:  printf(COLOUR_YELLOW);  break;
     }
 #endif
 }

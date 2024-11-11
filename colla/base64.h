@@ -1,7 +1,6 @@
 #pragma once
 
 #include "collatypes.h"
-#include "str.h"
 
 typedef struct arena_t arena_t;
 

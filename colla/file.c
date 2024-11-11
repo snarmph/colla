@@ -8,8 +8,7 @@
 #if COLLA_WIN
 
 #define WIN32_LEAN_AND_MEAN
-#include <fileapi.h>
-#include <handleapi.h>
+#include <windows.h>
 
 #undef FILE_BEGIN
 #undef FILE_CURRENT
@@ -18,6 +17,10 @@
 #define FILE_BEGIN           0
 #define FILE_CURRENT         1
 #define FILE_END             2
+
+#if COLLA_TCC
+#include "tcc/colla_tcc.h"
+#endif
 
 static DWORD file__mode_to_access(filemode_e mode) {
     if (mode & FILE_APPEND) return FILE_APPEND_DATA;
@@ -38,22 +41,70 @@ bool fileExists(const char *name) {
     return GetFileAttributesA(name) != INVALID_FILE_ATTRIBUTES;
 }
 
-file_t fileOpen(arena_t scratch, strview_t name, filemode_e mode) {
+TCHAR *fileGetFullPath(arena_t *arena, strview_t filename) {
     TCHAR long_path_prefix[] = TEXT("\\\\?\\");
     const usize prefix_len = arrlen(long_path_prefix) - 1;
 
-    TCHAR *rel_path = strvToTChar(&scratch, name);
+    uint8 tempbuf[4096];
+    arena_t scratch = arenaMake(ARENA_STATIC, sizeof(tempbuf), tempbuf);
+
+    TCHAR *rel_path = strvToTChar(&scratch, filename);
     DWORD pathlen = GetFullPathName(rel_path, 0, NULL, NULL);
 
-    TCHAR *full_path = alloc(&scratch, TCHAR, pathlen + prefix_len + 1);
+    TCHAR *full_path = alloc(arena, TCHAR, pathlen + prefix_len + 1);
     memcpy(full_path, long_path_prefix, prefix_len * sizeof(TCHAR));
 
     GetFullPathName(rel_path, pathlen + 1, full_path + prefix_len, NULL);
 
+    return full_path;
+}
+
+strview_t fileGetFilename(strview_t path) {
+    usize last_lin = strvRFind(path, '/', 0);
+    usize last_win = strvRFind(path, '\\', 0);
+    last_lin = last_lin != SIZE_MAX ? last_lin : 0;
+    last_win = last_win != SIZE_MAX ? last_win : 0;
+    usize last = max(last_lin, last_win);
+    return strvSub(path, last ? last + 1 : last, SIZE_MAX);
+}
+
+strview_t fileGetExtension(strview_t path) {
+    usize ext_pos = strvRFind(path, '.', 0);
+    return strvSub(path, ext_pos, SIZE_MAX);
+}
+
+void fileSplitPath(strview_t path, strview_t *dir, strview_t *name, strview_t *ext) {
+    usize dir_lin = strvRFind(path, '/', 0);
+    usize dir_win = strvRFind(path, '\\', 0);
+    dir_lin = dir_lin != STR_NONE ? dir_lin : 0;
+    dir_win = dir_win != STR_NONE ? dir_win : 0;
+    usize dir_pos = max(dir_lin, dir_win);
+
+    usize ext_pos = strvRFind(path, '.', 0);
+
+    if (dir) {
+        *dir = strvSub(path, 0, dir_pos);
+    }
+    if (name) {
+        *name = strvSub(path, dir_pos ? dir_pos + 1 : dir_pos, ext_pos);
+    }
+    if (ext) {
+        *ext = strvSub(path, ext_pos, SIZE_MAX);
+    }
+}
+
+bool fileDelete(arena_t scratch, strview_t filename) {
+    wchar_t *wfname = strvToWChar(&scratch, filename, NULL);
+    return DeleteFileW(wfname);
+}
+
+file_t fileOpen(arena_t scratch, strview_t name, filemode_e mode) {
+    TCHAR *full_path = fileGetFullPath(&scratch, name);
+
     HANDLE handle = CreateFile(
         full_path,
         file__mode_to_access(mode),
-        0,
+        FILE_SHARE_READ,
         NULL,
         file__mode_to_creation(mode),
         FILE_ATTRIBUTE_NORMAL,
@@ -78,14 +129,14 @@ bool fileIsValid(file_t ctx) {
 usize fileRead(file_t ctx, void *buf, usize len) {
     if (!fileIsValid(ctx)) return 0;
     DWORD read = 0;
-    ReadFile((HANDLE)ctx.handle, buf, len, &read, NULL);
+    ReadFile((HANDLE)ctx.handle, buf, (DWORD)len, &read, NULL);
     return (usize)read;
 }
 
 usize fileWrite(file_t ctx, const void *buf, usize len) {
     if (!fileIsValid(ctx)) return 0;
     DWORD written = 0;
-    WriteFile((HANDLE)ctx.handle, buf, len, &written, NULL);
+    WriteFile((HANDLE)ctx.handle, buf, (DWORD)len, &written, NULL);
     return (usize)written;
 }
 
@@ -160,7 +211,9 @@ void fileClose(file_t ctx) {
 }
 
 bool fileIsValid(file_t ctx) {
-    return (FILE *)ctx.handle != NULL;
+    bool is_valid = (FILE *)ctx.handle != NULL;
+    if (!is_valid) warn("file not valid");
+    return is_valid;
 }
 
 usize fileRead(file_t ctx, void *buf, usize len) {
@@ -180,7 +233,7 @@ bool fileSeekEnd(file_t ctx) {
 
 void fileRewind(file_t ctx) {
     if (!fileIsValid(ctx)) return;
-    return fseek((FILE *)ctx.handle, 0, SEEK_SET) == 0;
+    fseek((FILE *)ctx.handle, 0, SEEK_SET);
 }
 
 usize fileTell(file_t ctx) {
@@ -199,6 +252,7 @@ usize fileSize(file_t ctx) {
 
 uint64 fileGetTimeFP(file_t ctx) {
 #if COLLA_LIN
+    return 0;
 #else
     fatal("fileGetTime not implemented yet outside of linux and windows");
     return 0;
@@ -228,8 +282,15 @@ bool filePrintfv(arena_t scratch, file_t ctx, const char *fmt, va_list args) {
     return fileWrite(ctx, string.buf, string.len) == string.len;
 }
 
-buffer_t fileReadWhole(arena_t *arena, arena_t scratch, strview_t name) {
-    return fileReadWholeFP(arena, fileOpen(scratch, name, FILE_READ));
+buffer_t fileReadWhole(arena_t *arena, strview_t name) {
+    file_t fp = fileOpen(*arena, name, FILE_READ);
+    if (!fileIsValid(fp)) {
+        err("could not open file: %v", name);
+        return (buffer_t){0};
+    }
+    buffer_t out = fileReadWholeFP(arena, fp);
+    fileClose(fp);
+    return out;
 }
 
 buffer_t fileReadWholeFP(arena_t *arena, file_t ctx) {
@@ -249,8 +310,11 @@ buffer_t fileReadWholeFP(arena_t *arena, file_t ctx) {
     return out;
 }
 
-str_t fileReadWholeStr(arena_t *arena, arena_t scratch, strview_t name) {
-    return fileReadWholeStrFP(arena, fileOpen(scratch, name, FILE_READ));
+str_t fileReadWholeStr(arena_t *arena, strview_t name) {
+    file_t fp = fileOpen(*arena, name, FILE_READ);
+    str_t out = fileReadWholeStrFP(arena, fp);
+    fileClose(fp);
+    return out;
 }
 
 str_t fileReadWholeStrFP(arena_t *arena, file_t ctx) {
@@ -263,7 +327,7 @@ str_t fileReadWholeStrFP(arena_t *arena, file_t ctx) {
     usize read = fileRead(ctx, out.buf, out.len);
 
     if (read != out.len) {
-        err("fileReadWholeFP: fileRead failed, should be %zu but is %zu", out.len, read);
+        err("fileReadWholeStrFP: fileRead failed, should be %zu but is %zu", out.len, read);
         arenaPop(arena, out.len + 1);
         return (str_t){0};
     }
@@ -282,7 +346,15 @@ bool fileWriteWhole(arena_t scratch, strview_t name, const void *buf, usize len)
 }
 
 uint64 fileGetTime(arena_t scratch, strview_t name) {
-    return fileGetTimeFP(fileOpen(scratch, name, FILE_READ));
+    file_t fp = fileOpen(scratch, name, FILE_READ);
+    uint64 result = fileGetTimeFP(fp);
+    fileClose(fp);
+    return result;
+}
+
+bool fileHasChanged(arena_t scratch, strview_t name, uint64 last_timestamp) {
+    uint64 timestamp = fileGetTime(scratch, name);
+    return timestamp > last_timestamp;
 }
 
 #include "warnings/colla_warn_end.h"

@@ -35,6 +35,8 @@ ini_t iniParse(arena_t *arena, strview_t filename, const iniopts_t *options);
 ini_t iniParseFile(arena_t *arena, file_t file, const iniopts_t *options);
 ini_t iniParseStr(arena_t *arena, strview_t str, const iniopts_t *options);
 
+bool iniIsValid(ini_t *ctx);
+
 #define INI_ROOT strv("__ROOT__")
 
 initable_t *iniGetTable(ini_t *ctx, strview_t name);

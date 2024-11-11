@@ -2,7 +2,11 @@
 
 #include "collatypes.h"
 
+#ifdef __TINYC__
+#define alignof __alignof__
+#else
 #define alignof _Alignof
+#endif
 
 typedef enum {
     ARENA_VIRTUAL,

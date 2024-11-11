@@ -2,6 +2,12 @@
 
 #include "collatypes.h"
 
+#if COLLA_TCC
+#define COLLA_NO_CONDITION_VAR 1
+#endif
+
+typedef struct arena_t arena_t;
+
 // == THREAD ===========================================
 
 typedef uintptr_t cthread_t;
@@ -32,6 +38,7 @@ bool mtxLock(cmutex_t ctx);
 bool mtxTryLock(cmutex_t ctx);
 bool mtxUnlock(cmutex_t ctx);
 
+#if !COLLA_NO_CONDITION_VAR
 // == CONDITION VARIABLE ===============================
 
 typedef uintptr_t condvar_t;
@@ -46,3 +53,5 @@ void condWakeAll(condvar_t cond);
 
 void condWait(condvar_t cond, cmutex_t mtx);
 void condWaitTimed(condvar_t cond, cmutex_t mtx, int milliseconds);
+
+#endif
