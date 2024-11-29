@@ -1,8 +1,9 @@
 #if COLLA_ONLYCORE
-    #define COLLA_NOTHREADS 1
-    #define COLLA_NOSOCKETS 1
-    #define COLLA_NOHTTP    1
-    #define COLLA_NOSERVER  1
+    #define COLLA_NOTHREADS   1
+    #define COLLA_NOSOCKETS   1
+    #define COLLA_NOHTTP      1
+    #define COLLA_NOSERVER    1
+    #define COLLA_NOHOTRELOAD 1
 #endif
 
 #if COLLA_NOSOCKETS
@@ -12,32 +13,40 @@
     #define COLLA_NOSERVER  1
 #endif
 
-#include "src/arena.c"
-#include "src/base64.c"
-#include "src/file.c"
-#include "src/format.c"
-#include "src/ini.c"
-#include "src/json.c"
-#include "src/str.c"
-#include "src/strstream.c"
-#include "src/tracelog.c"
-#include "src/utf8.c"
-#include "src/vmem.c"
-#include "src/xml.c"
-#include "src/hot_reload.c"
+#include "arena.c"
+#include "base64.c"
+#include "file.c"
+#include "format.c"
+#include "ini.c"
+#include "json.c"
+#include "str.c"
+#include "strstream.c"
+#include "tracelog.c"
+#include "utf8.c"
+#include "vmem.c"
+#include "xml.c"
+#include "sha1.c"
+#include "markdown.c"
+#include "highlight.c"
+#include "dir.c"
 
 #if !COLLA_NOTHREADS
-#include "src/cthreads.c"
+#include "cthreads.c"
 #endif
 
 #if !COLLA_NOSOCKETS
-#include "src/socket.c"
+#include "socket.c"
+#include "websocket.c"
 #endif
 
 #if !COLLA_NOHTTP
-#include "src/http.c"
+#include "http.c"
 #endif
 
 #if !COLLA_NOSERVER 
-#include "src/server.c"
+#include "server.c"
+#endif
+
+#if !COLLA_NOHOTRELOAD
+#include "hot_reload.c"
 #endif

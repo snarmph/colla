@@ -1,0 +1,8 @@
+#!/bin/bash
+
+# cosmocc -Os -mtiny -o docs.com docs.c
+
+# optimised version for x86/64 only, shaves off ~300KB
+x86_64-unknown-cosmo-cc -Os -mtiny -o ../docs/docs.com docs.c
+
+rm ../docs/docs.com.dbg
