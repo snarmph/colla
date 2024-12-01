@@ -1,6 +1,6 @@
 #pragma once
 
-#if COLLA_TCC
+#if COLLA_TCC && COLLA_WIN
 
 #include <Windows.h>
 
