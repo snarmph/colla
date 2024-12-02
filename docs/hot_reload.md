@@ -1,6 +1,3 @@
----
-title = Hot Reload
----
 # Hot Reload
 ----------
 

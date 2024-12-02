@@ -1,5 +1,2 @@
----
-title = Socket
----
 # Socket
 ----------

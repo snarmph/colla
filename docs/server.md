@@ -1,5 +1,2 @@
----
-title = Server
----
 # Server
 ----------

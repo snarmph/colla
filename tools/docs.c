@@ -91,9 +91,7 @@ page_t *get_pages(arena_t *arena, strview_t path, strview_t default_page) {
         str_t fullname = strFmt(&scratch, "%v/%v", path, entry->name);
         str_t markdown_str = fileReadWholeStr(&scratch, strv(fullname));
 
-        ini_t config = {0};
         str_t md = markdownStr(&scratch, strv(markdown_str), &(md_options_t){
-            .out_config = &config,
             .parsers = (md_parser_t[]){
                 {
                     .init = md_cparser_init,
@@ -105,18 +103,14 @@ page_t *get_pages(arena_t *arena, strview_t path, strview_t default_page) {
             .parsers_count = 1,
         });
 
-        inivalue_t *title = iniGet(iniGetTable(&config, INI_ROOT), strv("title"));
-
         page_t *page = alloc(arena, page_t);
         page->data = md;
         page->url = str(arena, name);
 
-        if (title) {
-            page->title = str(arena, title->value);
-        }
-        else {
-            page->title = page->url;
-        }
+        usize line_end = strvFind(strv(markdown_str), '\n', 0);
+        strview_t line = strvSub(strv(markdown_str), 0, line_end);
+        strview_t page_title = strvTrim(strvRemovePrefix(line, 1));
+        page->title = strFmt(arena, "%v", page_title);
 
         if (!first && strvEquals(name, default_page)) {
             first = page;
