@@ -473,7 +473,7 @@ static hl_htable_result_e hl_htable_add(arena_t *arena, hl_hashtable_t *table, s
     }
 
     if ((float)table->used >= table->count * 0.6f) {
-        warn("more than 60%% of the arena is being used: %d/%d", table->used, table->count);
+        warn("more than 60%% of the hashmap is being used: %d/%d", table->used, table->count);
     }
 
     uint64 hash = hl_htable_hash(key.buf, key.len);
@@ -502,7 +502,7 @@ static hl_htable_result_e hl_htable_add(arena_t *arena, hl_hashtable_t *table, s
 }
 
 static hl_node_t *hl_htable_get(hl_hashtable_t *table, strview_t key) {
-    if (!table || table->count == 0) {
+    if (!table || table->used == 0) {
         return NULL;
     }
     

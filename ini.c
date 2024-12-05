@@ -9,7 +9,7 @@
 static void ini__parse(arena_t *arena, ini_t *ini, const iniopts_t *options);
 
 ini_t iniParse(arena_t *arena, strview_t filename, const iniopts_t *options) {
-    file_t fp = fileOpen(*arena, filename, FILE_READ);
+    file_t fp = fileOpen(filename, FILE_READ);
     ini_t out = iniParseFile(arena, fp, options);
     fileClose(fp);
     return out;

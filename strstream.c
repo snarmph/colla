@@ -503,7 +503,7 @@ buffer_t obstrAsBuf(obytestream_t *ctx) {
 }
 
 void obstrWrite(obytestream_t *ctx, const void *buf, usize buflen) {
-    uint8 *dst = alloc(ctx->arena, uint8, buflen);
+    uint8 *dst = alloc(ctx->arena, uint8, buflen, ALLOC_NOZERO);
     memcpy(dst, buf, buflen);
 }
 

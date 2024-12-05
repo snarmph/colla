@@ -5,6 +5,10 @@
 #include "tracelog.h"
 #include "format.h"
 
+#define FILE_MAKE_SCRATCH() \
+    uint8 tmpbuf[KB(1)]; \
+    arena_t scratch = arenaMake(ARENA_STATIC, sizeof(tmpbuf), tmpbuf)
+
 #if COLLA_WIN
 
 #include <windows.h>
@@ -36,16 +40,17 @@ static DWORD file__mode_to_creation(filemode_e mode) {
     return OPEN_ALWAYS;
 }
 
-bool fileExists(const char *name) {
-    return GetFileAttributesA(name) != INVALID_FILE_ATTRIBUTES;
+bool fileExists(strview_t path) {
+    FILE_MAKE_SCRATCH();
+    str_t name = str(&scratch, path);
+    return GetFileAttributesA(name.buf) != INVALID_FILE_ATTRIBUTES;
 }
 
 TCHAR *fileGetFullPath(arena_t *arena, strview_t filename) {
+    FILE_MAKE_SCRATCH();
+
     TCHAR long_path_prefix[] = TEXT("\\\\?\\");
     const usize prefix_len = arrlen(long_path_prefix) - 1;
-
-    uint8 tempbuf[4096];
-    arena_t scratch = arenaMake(ARENA_STATIC, sizeof(tempbuf), tempbuf);
 
     TCHAR *rel_path = strvToTChar(&scratch, filename);
     DWORD pathlen = GetFullPathName(rel_path, 0, NULL, NULL);
@@ -58,12 +63,15 @@ TCHAR *fileGetFullPath(arena_t *arena, strview_t filename) {
     return full_path;
 }
 
-bool fileDelete(arena_t scratch, strview_t filename) {
+bool fileDelete(strview_t filename) {
+    FILE_MAKE_SCRATCH();
     wchar_t *wfname = strvToWChar(&scratch, filename, NULL);
     return DeleteFileW(wfname);
 }
 
-file_t fileOpen(arena_t scratch, strview_t name, filemode_e mode) {
+file_t fileOpen(strview_t name, filemode_e mode) {
+    FILE_MAKE_SCRATCH();
+
     TCHAR *full_path = fileGetFullPath(&scratch, name);
 
     HANDLE handle = CreateFile(
@@ -103,6 +111,15 @@ usize fileWrite(file_t ctx, const void *buf, usize len) {
     DWORD written = 0;
     WriteFile((HANDLE)ctx.handle, buf, (DWORD)len, &written, NULL);
     return (usize)written;
+}
+
+bool fileSeek(file_t ctx, usize pos) {
+    if (!fileIsValid(ctx)) return false;
+    LARGE_INTEGER offset = {
+        .QuadPart = pos,
+    };
+    DWORD result = SetFilePointer((HANDLE)ctx.handle, offset.LowPart, &offset.HighPart, FILE_BEGIN);
+    return result != INVALID_SET_FILE_POINTER;
 }
 
 bool fileSeekEnd(file_t ctx) {
@@ -154,19 +171,25 @@ static const char *file__mode_to_stdio(filemode_e mode) {
     return "ab+";
 }
 
-bool fileExists(const char *name) {
-    FILE *fp = fopen(name, "rb");
+bool fileExists(strview_t path) {
+    FILE_MAKE_SCRATCH();
+    str_t name = str(&scratch, path);
+
+    FILE *fp = fopen(name.buf, "rb");
     bool exists = fp != NULL;
     fclose(fp);
+
     return exists;
 }
 
-bool fileDelete(arena_t scratch, strview_t filename) {
+bool fileDelete(strview_t filename) {
+    FILE_MAKE_SCRATCH();
     str_t name = str(&scratch, filename);
     return remove(name.buf) == 0;
 }
 
-file_t fileOpen(arena_t scratch, strview_t name, filemode_e mode) {
+file_t fileOpen(strview_t name, filemode_e mode) {
+    FILE_MAKE_SCRATCH();
     str_t filename = str(&scratch, name);
     return (file_t) {
         .handle = (uintptr_t)fopen(filename.buf, file__mode_to_stdio(mode))
@@ -194,6 +217,12 @@ usize fileRead(file_t ctx, void *buf, usize len) {
 usize fileWrite(file_t ctx, const void *buf, usize len) {
     if (!fileIsValid(ctx)) return 0;
     return fwrite(buf, 1, len, (FILE *)ctx.handle);
+}
+
+bool fileSeek(file_t ctx, usize pos) {
+    assert(pos < INT32_MAX);
+    if (!fileIsValid(ctx)) return false;
+    return fseek((FILE *)ctx.handle, (long)pos, SEEK_SET) == 0;
 }
 
 bool fileSeekEnd(file_t ctx) {
@@ -287,7 +316,7 @@ bool filePrintfv(arena_t scratch, file_t ctx, const char *fmt, va_list args) {
 }
 
 buffer_t fileReadWhole(arena_t *arena, strview_t name) {
-    file_t fp = fileOpen(*arena, name, FILE_READ);
+    file_t fp = fileOpen(name, FILE_READ);
     if (!fileIsValid(fp)) {
         err("could not open file: %v", name);
         return (buffer_t){0};
@@ -315,7 +344,7 @@ buffer_t fileReadWholeFP(arena_t *arena, file_t ctx) {
 }
 
 str_t fileReadWholeStr(arena_t *arena, strview_t name) {
-    file_t fp = fileOpen(*arena, name, FILE_READ);
+    file_t fp = fileOpen(name, FILE_READ);
     if (!fileIsValid(fp)) {
         warn("could not open file (%v)", name);
     }
@@ -342,8 +371,8 @@ str_t fileReadWholeStrFP(arena_t *arena, file_t ctx) {
     return out;
 }
 
-bool fileWriteWhole(arena_t scratch, strview_t name, const void *buf, usize len) {
-    file_t fp = fileOpen(scratch, name, FILE_WRITE);
+bool fileWriteWhole(strview_t name, const void *buf, usize len) {
+    file_t fp = fileOpen(name, FILE_WRITE);
     if (!fileIsValid(fp)) {
         return false;
     }
@@ -352,16 +381,18 @@ bool fileWriteWhole(arena_t scratch, strview_t name, const void *buf, usize len)
     return written == len;
 }
 
-uint64 fileGetTime(arena_t scratch, strview_t name) {
-    file_t fp = fileOpen(scratch, name, FILE_READ);
+uint64 fileGetTime(strview_t name) {
+    file_t fp = fileOpen(name, FILE_READ);
     uint64 result = fileGetTimeFP(fp);
     fileClose(fp);
     return result;
 }
 
-bool fileHasChanged(arena_t scratch, strview_t name, uint64 last_timestamp) {
-    uint64 timestamp = fileGetTime(scratch, name);
+bool fileHasChanged(strview_t name, uint64 last_timestamp) {
+    uint64 timestamp = fileGetTime(name);
     return timestamp > last_timestamp;
 }
 
 #include "warnings/colla_warn_end.h"
+
+#undef FILE_MAKE_SCRATCH

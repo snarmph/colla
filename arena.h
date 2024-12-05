@@ -9,6 +9,7 @@
 #endif
 
 typedef enum {
+    ARENA_TYPE_NONE, // only here so that a 0 initialised arena is valid
     ARENA_VIRTUAL,
     ARENA_MALLOC,
     ARENA_STATIC,

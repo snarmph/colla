@@ -39,9 +39,9 @@ typedef struct {
 } html_tag_t;
 
 static void html__tag(html_context_t *ctx, const char *tag, html_tag_t *args) {
-    ostrPrintf(&ctx->stream, "<%s ", tag);
+    ostrPrintf(&ctx->stream, "<%s", tag);
 
-#define X(name, ...) if (args->name) { ostrPrintf(&ctx->stream, #name "=\"%s\" ", args->name); }
+#define X(name, ...) if (args->name) { ostrPrintf(&ctx->stream, " " #name "=\"%s\"", args->name); }
     html__args()
 #undef X
 

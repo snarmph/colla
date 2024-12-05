@@ -24,7 +24,7 @@ typedef struct {
     hr_f hr_close;
 } hr_internal_t;
 
-static bool hr__os_reload(hr_internal_t *hr);
+static bool hr__os_reload(hr_internal_t *hr, str_t libpath);
 static void hr__os_free(hr_internal_t *hr);
 
 static bool hr__file_copy(arena_t scratch, strview_t src, strview_t dst) {
@@ -33,7 +33,7 @@ static bool hr__file_copy(arena_t scratch, strview_t src, strview_t dst) {
         err("fileReadWhole(%v) returned an empty buffer", src);
         return false;
     }
-    if (!fileWriteWhole(scratch, dst, srcbuf.data, srcbuf.len)) {
+    if (!fileWriteWhole(dst, srcbuf.data, srcbuf.len)) {
         err("fileWriteWhole failed");
         return false;
     }
@@ -48,12 +48,12 @@ static bool hr__reload(hr_t *ctx) {
     hr_internal_t *hr = ctx->p;
     arena_t scratch = hr->arena;
 
-    if (!fileExists(hr->path.buf)) {
+    if (!fileExists(strv(hr->path))) {
         err("dll file %v does not exist anymore!", hr->path);
         return false;
     }
 
-    uint64 now = fileGetTime(scratch, strv(hr->path));
+    uint64 now = fileGetTime(strv(hr->path));
     if (now <= hr->last_timestamp) {
         return false;
     }
@@ -63,16 +63,24 @@ static bool hr__reload(hr_t *ctx) {
     // can't copy the dll directly, make a temporary one based on the version
     strview_t dir, name, ext;
     fileSplitPath(strv(hr->path), &dir, &name, &ext);
-    str_t dll = strFmt(&scratch, "%v/%v-%d%v", dir, name, ctx->version, ext);
+    str_t libpath = strFmt(&scratch, "%v/%v-%d%v", dir, name, ctx->version, ext);
 
-    if (!hr__file_copy(scratch, strv(hr->path), strv(dll))) {
-        err("failed to copy %v to %v", hr->path, dll);
+    if (!hr__file_copy(scratch, strv(hr->path), strv(libpath))) {
+        err("failed to copy %v to %v", hr->path, libpath);
         return false;
     }
 
-    info("loading library: %v", dll);
+    info("loading library: %v", libpath);
 
-    return hr__os_reload(hr);
+    bool success = hr__os_reload(hr, libpath);
+    if (success) {
+        info("Reloaded, version: %d", ctx->version);
+        ctx->last_working_version = ctx->version;
+        hr->last_timestamp = now;
+        hr->hr_init(ctx);
+    }
+    
+    return success;
 }
 
 bool hrOpen(hr_t *ctx, strview_t path) {
@@ -80,19 +88,17 @@ bool hrOpen(hr_t *ctx, strview_t path) {
     cr_init(ctx);
     return true;
 #endif
-    arena_t arena = arenaMake(ARENA_VIRTUAL, MB(1));
 
-    str_t path_copy = str(&arena, path);
-
-    if (!fileExists(path_copy.buf)) {
+    if (!fileExists(path)) {
         err("dll file: %v does not exist", path);
-        arenaCleanup(&arena);
         return false;
     }
 
+    arena_t arena = arenaMake(ARENA_VIRTUAL, MB(1));
+
     hr_internal_t *hr = alloc(&arena, hr_internal_t);
     hr->arena = arena;
-    hr->path = path_copy;
+    hr->path = str(&arena, path);
 
     ctx->p = hr;
     ctx->last_working_version = 0;
@@ -124,7 +130,7 @@ void hrClose(hr_t *ctx, bool clean_temp_files) {
 
         for (int i = 0; i < ctx->last_working_version; ++i) {
             str_t fname = strFmt(&scratch, "%v/%v-%d%v", dir, name, i + 1, ext);
-            if (!fileDelete(scratch, strv(fname))) {
+            if (!fileDelete(strv(fname))) {
                 err("couldn't delete %v", fname);
             }
         }
@@ -158,14 +164,14 @@ bool hrReload(hr_t *ctx) {
 
 #if COLLA_WIN
 
-static bool hr__os_reload(hr_internal_t *hr) {
+static bool hr__os_reload(hr_internal_t *hr, str_t libpath) {
     if (hr->handle) {
         FreeLibrary(hr->handle);
     }
 
-    hr->handle = LoadLibraryA(dll.buf);
+    hr->handle = LoadLibraryA(libpath.buf);
     if (!hr->handle) {
-        err("couldn't load %v: %u", dll, GetLastError());
+        err("couldn't load %v: %u", libpath, GetLastError());
         return true;
     }
 
@@ -191,11 +197,6 @@ static bool hr__os_reload(hr_internal_t *hr) {
         goto error;
     }
 
-    info("Reloaded, version: %d", ctx->version);
-    hr->last_timestamp = now;
-    ctx->last_working_version = ctx->version;
-
-    hr->hr_init(ctx);
 
     return true;
 
@@ -214,7 +215,7 @@ static void hr__os_free(hr_internal_t *hr) {
 
 #elif COLLA_LIN
 
-static bool hr__os_reload(hr_internal_t *hr) {
+static bool hr__os_reload(hr_internal_t *hr, str_t libpath) {
     fatal("todo: linux hot reload not implemented yet");
     return true;
 }

@@ -16,14 +16,14 @@ typedef struct {
     uintptr_t handle;
 } file_t;
 
-bool fileExists(const char *name);
+bool fileExists(strview_t path);
 TCHAR *fileGetFullPath(arena_t *arena, strview_t filename);
 strview_t fileGetFilename(strview_t path);
 strview_t fileGetExtension(strview_t path);
 void fileSplitPath(strview_t path, strview_t *dir, strview_t *name, strview_t *ext);
-bool fileDelete(arena_t scratch, strview_t filename);
+bool fileDelete(strview_t filename);
 
-file_t fileOpen(arena_t scratch, strview_t name, filemode_e mode);
+file_t fileOpen(strview_t name, filemode_e mode);
 void fileClose(file_t ctx);
 
 bool fileIsValid(file_t ctx);
@@ -36,6 +36,7 @@ bool filePrintfv(arena_t scratch, file_t ctx, const char *fmt, va_list args);
 usize fileRead(file_t ctx, void *buf, usize len);
 usize fileWrite(file_t ctx, const void *buf, usize len);
 
+bool fileSeek(file_t ctx, usize pos);
 bool fileSeekEnd(file_t ctx);
 void fileRewind(file_t ctx);
 
@@ -48,8 +49,8 @@ buffer_t fileReadWholeFP(arena_t *arena, file_t ctx);
 str_t fileReadWholeStr(arena_t *arena, strview_t name);
 str_t fileReadWholeStrFP(arena_t *arena, file_t ctx);
 
-bool fileWriteWhole(arena_t scratch, strview_t name, const void *buf, usize len);
+bool fileWriteWhole(strview_t name, const void *buf, usize len);
 
-uint64 fileGetTime(arena_t scratch, strview_t name);
+uint64 fileGetTime(strview_t name);
 uint64 fileGetTimeFP(file_t ctx);
-bool fileHasChanged(arena_t scratch, strview_t name, uint64 last_timestamp);
+bool fileHasChanged(strview_t name, uint64 last_timestamp);

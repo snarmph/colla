@@ -75,6 +75,7 @@ str_t markdownStr(arena_t *arena, strview_t markdown_str, md_options_t *options)
 static void markdown__parse_config(arena_t *arena, instream_t *in, ini_t *out) {
     strview_t first_line = strvTrim(istrGetLine(in));
     if (!strvEquals(first_line, strv("---"))) {
+        istrRewind(in);
         return;
     }
     

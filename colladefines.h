@@ -100,6 +100,9 @@
 
 #if COLLA_WIN
 
+#undef  NOMINMAX
+#undef  WIN32_LEAN_AND_MEAN
+
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 

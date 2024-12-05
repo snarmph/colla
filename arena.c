@@ -57,7 +57,7 @@ arena_t arenaScratch(arena_t *arena, usize size) {
 }
 
 void *arenaAlloc(const arena_alloc_desc_t *desc) {
-    if (!desc || !desc->arena) {
+    if (!desc || !desc->arena || desc->arena->type == ARENA_TYPE_NONE) {
         return NULL;
     }
 
@@ -70,7 +70,7 @@ void *arenaAlloc(const arena_alloc_desc_t *desc) {
         if (desc->flags & ALLOC_SOFT_FAIL) {
             return NULL;
         }
-        printf("finished space in arena, tried to allocate %zu bytes out of %zu\n", total, arenaRemaining(arena));
+        fatal("finished space in arena, tried to allocate %_$$$dB out of %_$$$dB\n", total, arenaRemaining(arena));
         abort();
     }
 

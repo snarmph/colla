@@ -17,6 +17,11 @@
 
 const char *raw_css;
 
+struct {
+    bool gen;
+    strview_t gendir;
+} options = {0};
+
 typedef struct page_t {
     str_t title;
     str_t url;
@@ -144,14 +149,18 @@ page_t *get_pages(arena_t *arena, strview_t path, strview_t default_page) {
                             divBeg(.class="pages");
                                 for_each(item, head) {
                                     str_t class   = strFmt(&scratch, "page-item%s", item == page ? " page-current" : "");
-                                    str_t href    = strFmt(&scratch, "/%v", item->url);
-                                    str_t onclick = strFmt(&scratch, "window.location = \"/%v\"", item->url);
+                                    str_t href = STR_EMPTY;
+                                    if (options.gen) {
+                                        href = strFmt(&scratch, "%v.html", item->url);
+                                    }
+                                    else {
+                                        href = strFmt(&scratch, "%v", item->url);
+                                    }
                                     
                                     a(
                                         item->title, 
                                         .href    = href.buf,
                                         .class   = class.buf,
-                                        .onclick = onclick.buf
                                     );
                                 }
                             divEnd();
@@ -203,13 +212,46 @@ str_t server_quit(arena_t scratch, server_t *server, server_req_t *req, void *us
     return STR_EMPTY;
 }
 
-int main() {
+int main(int argc, char **argv) {
     arena_t arena = arenaMake(ARENA_VIRTUAL, MB(1));
+
+    for (int i = 1; i < argc; ++i) {
+        strview_t arg = strv(argv[i]);
+        if (strvEquals(arg, strv("-h"))) {
+            info("usage: %s [-h, -gen <outdir>]", argv[0]);
+            return 0;
+        }
+        else if (strvEquals(arg, strv("-gen"))) {
+            options.gen = true;
+            if ((i + 1) < argc) {
+                options.gendir = strv(argv[++i]);
+            }
+        }
+    }
 
     page_t *pages = get_pages(&arena, strv("."), strv("readme"));
     if (!pages) {
         err("could not get pages");
         return 1;
+    }
+
+    if (options.gen) {
+        if (strvBack(options.gendir) == '/' || strvBack(options.gendir) == '\\') {
+            options.gendir.len -= 1;
+        } 
+
+        for_each(page, pages) {
+            arena_t scratch = arena;
+            str_t fname = strFmt(&scratch, "%v/%v.html", options.gendir, page->url);
+            if (!fileWriteWhole(strv(fname), page->data.buf, page->data.len)) {
+                err("couldn't save page %v", fname);
+            }
+            else {
+                info("saved %v", fname);
+            }
+        }
+
+        return 0;
     }
 
     server_t *s = serverSetup(&arena, 8080, true);
