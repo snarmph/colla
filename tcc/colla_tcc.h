@@ -3,6 +3,7 @@
 #if COLLA_TCC && COLLA_WIN
 
 #include <Windows.h>
+#include <stdlib.h>
 
 //// FILE.H ////////////////////////////////////////////////////////////////////////////////////
 
@@ -20,6 +21,15 @@ static BOOL tcc_GetFileSizeEx(HANDLE hFile, PLARGE_INTEGER lpFileSize) {
 //// STR.H /////////////////////////////////////////////////////////////////////////////////////
 
 #define CP_UTF8 65001
+
+#define strtoull _strtoui64
+#define strtoll _strtoi64
+#define strtof strtod
+
+extern unsigned __int64 __stdcall _strtoui64(const char *strSource, char **endptr, int base);
+extern __int64 __stdcall _strtoi64(const char *strSource, char **endptr, int base);
+// extern double __cdecl strtod(const char *strSource, char **endptr);
+
 extern int __stdcall WideCharToMultiByte(UINT CodePage, DWORD dwFlags, LPCWCH lpWideCharStr, int cchWideChar, LPSTR lpMultiByteStr, int cbMultiByte, LPCCH lpDefaultChar, LPBOOL lpUsedDefaultChar);
 extern int __stdcall MultiByteToWideChar(UINT CodePage, DWORD dwFlags, LPCCH lpMultiByteStr, int cbMultiByte, LPWSTR lpWideCharStr, int cchWideChar);
 
@@ -264,6 +274,9 @@ extern BOOL __stdcall SleepConditionVariableCS(PCONDITION_VARIABLE ConditionVari
 #define INTERNET_DEFAULT_HTTPS_PORT 443
 #define INTERNET_SERVICE_HTTP 3
 #define INTERNET_FLAG_SECURE 0x00800000
+#define HTTP_QUERY_STATUS_CODE 19
+#define HTTP_QUERY_RAW_HEADERS_CRLF 22
+#define HTTP_QUERY_FLAG_NUMBER 0x20000000
 
 
 typedef LPVOID HINTERNET;
@@ -274,26 +287,34 @@ typedef WORD INTERNET_PORT;
     #define InternetConnect InternetConnectW
     #define HttpOpenRequest HttpOpenRequestW
     #define HttpSendRequest HttpSendRequestW
+    #define HttpAddRequestHeaders HttpAddRequestHeadersW
+    #define HttpQueryInfo HttpQueryInfoW
 #else
     #define InternetOpen InternetOpenA
     #define InternetConnect InternetConnectA
     #define HttpOpenRequest HttpOpenRequestA
     #define HttpSendRequest HttpSendRequestA
+    #define HttpAddRequestHeaders HttpAddRequestHeadersA
+    #define HttpQueryInfo HttpQueryInfoA
 #endif
 
 extern HINTERNET __stdcall InternetOpenW(LPCWSTR lpszAgent, DWORD dwAccessType, LPCWSTR lpszProxy, LPCWSTR lpszProxyBypass, DWORD dwFlags);
 extern HINTERNET __stdcall InternetConnectW(HINTERNET hInternet, LPCWSTR lpszServerName, INTERNET_PORT nServerPort, LPCWSTR lpszUserName, LPCWSTR lpszPassword, DWORD dwService, DWORD dwFlags, DWORD_PTR dwContext);
 extern HINTERNET __stdcall HttpOpenRequestW(HINTERNET hConnect, LPCWSTR lpszVerb, LPCWSTR lpszObjectName, LPCWSTR lpszVersion, LPCWSTR lpszReferrer, LPCWSTR *lplpszAcceptTypes, DWORD dwFlags, DWORD_PTR dwContext);
 extern BOOL __stdcall HttpSendRequestW(HINTERNET hRequest, LPCWSTR lpszHeaders, DWORD dwHeadersLength, LPVOID lpOptional, DWORD dwOptionalLength);
+extern BOOL __stdcall HttpAddRequestHeadersW(HINTERNET hRequest, LPCWSTR lpszHeaders, DWORD dwHeadersLength, DWORD dwModifiers);
+extern BOOL __stdcall HttpQueryInfoW(HINTERNET hRequest, DWORD dwInfoLevel, LPVOID lpBuffer, LPDWORD lpdwBufferLength, LPDWORD lpdwIndex);
 
 extern HINTERNET __stdcall InternetOpenA(LPCSTR lpszAgent, DWORD dwAccessType, LPCSTR lpszProxy, LPCSTR lpszProxyBypass, DWORD dwFlags);
 extern HINTERNET __stdcall InternetConnectA(HINTERNET hInternet, LPCSTR lpszServerName, INTERNET_PORT nServerPort, LPCSTR lpszUserName, LPCSTR lpszPassword, DWORD dwService, DWORD dwFlags, DWORD_PTR dwContext);
 extern HINTERNET __stdcall HttpOpenRequestA(HINTERNET hConnect, LPCSTR lpszVerb, LPCSTR lpszObjectName, LPCSTR lpszVersion, LPCSTR lpszReferrer, LPCSTR *lplpszAcceptTypes, DWORD dwFlags, DWORD_PTR dwContext);
 extern BOOL __stdcall HttpSendRequestA(HINTERNET hRequest, LPCSTR lpszHeaders, DWORD dwHeadersLength, LPVOID lpOptional, DWORD dwOptionalLength);
-
 extern BOOL __stdcall HttpAddRequestHeadersA(HINTERNET hRequest, LPCSTR lpszHeaders, DWORD dwHeadersLength, DWORD dwModifiers);
+extern BOOL __stdcall HttpQueryInfoA(HINTERNET hRequest, DWORD dwInfoLevel, LPVOID lpBuffer, LPDWORD lpdwBufferLength, LPDWORD lpdwIndex);
+
 extern BOOL __stdcall InternetReadFile(HINTERNET hFile, LPVOID lpBuffer, DWORD dwNumberOfBytesToRead, LPDWORD lpdwNumberOfBytesRead);
 extern BOOL __stdcall InternetCloseHandle(HINTERNET hInternet);
+
 
 #endif
 
